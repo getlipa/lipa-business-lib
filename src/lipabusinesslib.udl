@@ -1,0 +1,22 @@
+enum LogLevel {
+    "Error",
+    "Warn",
+    "Info",
+    "Debug",
+    "Trace",
+};
+
+[Error]
+enum WalletGenerationError {
+    "Other",
+};
+
+dictionary Wallet {
+    sequence<u8> private_key;
+};
+
+namespace lipabusinesslib {
+    void init_native_logger_once(LogLevel min_level);
+    [Throws=WalletGenerationError]
+    Wallet generate_wallet();
+};
