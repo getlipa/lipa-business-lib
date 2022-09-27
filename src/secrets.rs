@@ -10,7 +10,8 @@ use rand::RngCore;
 use std::str::FromStr;
 
 const BACKEND_AUTH_DERIVATION_PATH: &str = "m/76738065h/0h/0";
-const ACCOUNT_DERIVATION_PATH: &str = "m/84h/1h/0h";
+const ACCOUNT_DERIVATION_PATH_MAINNET: &str = "m/84h/1h/0h";
+const ACCOUNT_DERIVATION_PATH_TESTNET: &str = "m/84h/1h/1h";
 
 pub fn generate_mnemonic() -> Result<Vec<String>, MnemonicGenerationError> {
     let entropy = generate_random_bytes()?;
@@ -123,7 +124,8 @@ fn derive_account_xpub(network: Network, mnemonic: Mnemonic) -> Result<String, K
 
     let master_xpriv = get_master_xpriv(network, mnemonic)?;
 
-    let wallet_account_path = DerivationPath::from_str(ACCOUNT_DERIVATION_PATH).map_err(|e| {
+    let account_path_str = get_account_derivation_path(network);
+    let wallet_account_path = DerivationPath::from_str(account_path_str).map_err(|e| {
         KeyDerivationError::DerivationPathParse {
             message: e.to_string(),
         }
@@ -145,12 +147,23 @@ fn derive_account_xpub(network: Network, mnemonic: Mnemonic) -> Result<String, K
     Ok(account_xpub.to_string())
 }
 
+fn get_account_derivation_path(network: Network) -> &'static str {
+    match network {
+        Network::Bitcoin => ACCOUNT_DERIVATION_PATH_MAINNET,
+        Network::Testnet => ACCOUNT_DERIVATION_PATH_TESTNET,
+        Network::Signet => ACCOUNT_DERIVATION_PATH_TESTNET,
+        Network::Regtest => ACCOUNT_DERIVATION_PATH_TESTNET,
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use bdk::bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
     use bdk::bitcoin::util::bip32::ExtendedPubKey;
     use std::str::FromStr;
+
+    const NETWORK: Network = Network::Testnet;
 
     #[test]
     fn test_mnemonic_generation() {
@@ -168,7 +181,7 @@ mod test {
     #[test]
     fn test_keys_code_decode() {
         let mnemonic_string = generate_mnemonic().unwrap();
-        let keys = derive_keys_for_caching(Network::Testnet, mnemonic_string).unwrap();
+        let keys = derive_keys_for_caching(NETWORK, mnemonic_string).unwrap();
 
         let auth_priv_key = SecretKey::from_slice(keys.auth_keypair.secret_key.as_slice()).unwrap();
         assert_eq!(
@@ -194,7 +207,7 @@ mod test {
         let mnemonic_string = generate_mnemonic().unwrap();
         let mnemonic = Mnemonic::from_str(mnemonic_string.join(" ").as_str()).unwrap();
 
-        let keypair = derive_auth_keypair(Network::Testnet, mnemonic).unwrap();
+        let keypair = derive_auth_keypair(NETWORK, mnemonic).unwrap();
 
         let public_key_from_secret_key = PublicKey::from_secret_key(
             &Secp256k1::new(),
@@ -213,7 +226,7 @@ mod test {
 
         let mnemonic_string = generate_mnemonic().unwrap();
 
-        let keys = derive_keys_for_caching(Network::Testnet, mnemonic_string).unwrap();
+        let keys = derive_keys_for_caching(NETWORK, mnemonic_string).unwrap();
 
         let master_xpriv = ExtendedPrivKey::from_str(keys.master_xpriv.as_str()).unwrap();
         let account_xpub = ExtendedPubKey::from_str(keys.account_xpub.as_str()).unwrap();
@@ -222,9 +235,9 @@ mod test {
         // Deriving from the master the public key at "m/84h/1h/0h/0/0" must be equivalent to
         // deriving from the account the public key at "m/0/0"
 
+        let account_path_str = get_account_derivation_path(NETWORK);
         let path_from_master =
-            DerivationPath::from_str(format!("{}{}", ACCOUNT_DERIVATION_PATH, "/0/0").as_str())
-                .unwrap();
+            DerivationPath::from_str(format!("{}{}", account_path_str, "/0/0").as_str()).unwrap();
         let path_from_account = DerivationPath::from_str("m/0/0").unwrap();
 
         let target_xkey_from_master: ExtendedKey = master_xpriv
@@ -233,7 +246,7 @@ mod test {
             .into_extended_key()
             .unwrap();
         let target_pubkey_from_master = target_xkey_from_master
-            .into_xpub(Network::Testnet, &secp256k1)
+            .into_xpub(NETWORK, &secp256k1)
             .public_key;
 
         let target_pubkey_from_account = account_xpub
