@@ -1,5 +1,8 @@
 #[derive(Debug, thiserror::Error)]
-pub enum WalletGenerationError {
-    #[error("Failed to generate wallet: {message}")]
-    Other { message: String },
+pub enum MnemonicGenerationError {
+    #[error("Failed to generate entropy: {message}")]
+    EntropyGeneration { message: String },
+
+    #[error("Failed to generate mnemonic from entropy: {message}")]
+    MnemonicFromEntropy { message: String },
 }
