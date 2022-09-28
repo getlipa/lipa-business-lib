@@ -45,5 +45,5 @@ namespace lipabusinesslib {
     [Throws=MnemonicGenerationError]
     sequence<string> generate_mnemonic();
     [Throws=KeyDerivationError]
-    LipaKeys derive_keys_for_caching(Network network, sequence<string> mnemonic_string);
+    LipaKeys derive_keys(Network network, sequence<string> mnemonic_string);
 };
