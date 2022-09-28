@@ -27,6 +27,17 @@ enum KeyDerivationError {
     "XPrivFromExtendedKey",
     "DerivationPathParse",
     "Derivation",
+    "DescriptorKeyFromXPriv",
+    "DescPubKeyFromDescSecretKey",
+    "DescSecretKeyFromDescKey",
+};
+
+[Error]
+enum WalletError {
+    "ChainBackendClient",
+    "BdkWallet",
+    "ChainSync",
+    "GetBalance",
 };
 
 dictionary KeyPair {
@@ -34,10 +45,33 @@ dictionary KeyPair {
     sequence<u8> public_key;
 };
 
+dictionary Descriptors {
+    string spend_descriptor;
+    string watch_descriptor;
+};
+
 dictionary LipaKeys {
     KeyPair auth_keypair;
-    string master_xpriv;
-    string account_xpub;
+    Descriptors wallet_descriptors;
+};
+
+dictionary Config {
+    string electrum_url;
+    Network network;
+};
+
+dictionary Balance {
+    u64 confirmed;
+    u64 trusted_pending;
+    u64 untrusted_pending;
+    u64 immature;
+};
+
+interface Wallet {
+    [Throws=WalletError]
+    constructor(Config config);
+    [Throws=WalletError]
+    Balance get_balance(string watch_descriptor);
 };
 
 namespace lipabusinesslib {

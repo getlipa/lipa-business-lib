@@ -1,17 +1,19 @@
 use crate::errors::{KeyDerivationError, MnemonicGenerationError};
 use bdk::bitcoin::secp256k1::PublicKey;
-use bdk::bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey};
+use bdk::bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, KeySource};
 use bdk::bitcoin::Network;
+use bdk::descriptor::Segwitv0;
 use bdk::keys::bip39::Mnemonic;
-use bdk::keys::{DerivableKey, ExtendedKey};
+use bdk::keys::DescriptorKey::Secret;
+use bdk::keys::{DerivableKey, DescriptorKey, ExtendedKey};
 use bdk::miniscript::ToPublicKey;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::str::FromStr;
 
 const BACKEND_AUTH_DERIVATION_PATH: &str = "m/76738065'/0'/0";
-const ACCOUNT_DERIVATION_PATH_MAINNET: &str = "m/84'/1'/0h";
-const ACCOUNT_DERIVATION_PATH_TESTNET: &str = "m/84'/1'/1h";
+const ACCOUNT_DERIVATION_PATH_MAINNET: &str = "m/84'/0'/0'";
+const ACCOUNT_DERIVATION_PATH_TESTNET: &str = "m/84'/1'/0'";
 
 pub fn generate_mnemonic() -> Result<Vec<String>, MnemonicGenerationError> {
     let entropy = generate_random_bytes()?;
@@ -41,10 +43,14 @@ pub struct KeyPair {
     pub public_key: Vec<u8>,
 }
 
+pub struct Descriptors {
+    pub spend_descriptor: String,
+    pub watch_descriptor: String,
+}
+
 pub struct LipaKeys {
     pub auth_keypair: KeyPair,
-    pub master_xpriv: String,
-    pub account_xpub: String,
+    pub wallet_descriptors: Descriptors,
 }
 
 pub fn derive_keys(
@@ -60,13 +66,25 @@ pub fn derive_keys(
     let master_xpriv = get_master_xpriv(network, mnemonic)?;
 
     let auth_keypair = derive_auth_keypair(master_xpriv)?;
-
-    let account_xpub = derive_account_xpub(network, master_xpriv)?;
+    let spend_descriptor = build_descriptor(
+        master_xpriv,
+        "m",
+        format!("{}{}", get_account_derivation_path(network), "/0").as_str(),
+        false,
+    )?;
+    let watch_descriptor = build_descriptor(
+        master_xpriv,
+        get_account_derivation_path(network),
+        "m/0",
+        true,
+    )?;
 
     Ok(LipaKeys {
         auth_keypair,
-        master_xpriv: master_xpriv.to_string(),
-        account_xpub: account_xpub.to_string(),
+        wallet_descriptors: Descriptors {
+            spend_descriptor,
+            watch_descriptor,
+        },
     })
 }
 
@@ -114,33 +132,58 @@ fn get_master_xpriv(
     Ok(master_xpriv)
 }
 
-fn derive_account_xpub(
-    network: Network,
+fn build_descriptor(
     master_xpriv: ExtendedPrivKey,
-) -> Result<ExtendedPubKey, KeyDerivationError> {
+    extended_key_derivation_path: &str,
+    descriptor_derivation_path: &str,
+    public: bool,
+) -> Result<String, KeyDerivationError> {
     let secp256k1 = bdk::bitcoin::secp256k1::Secp256k1::new();
 
-    let account_path_str = get_account_derivation_path(network);
-    let wallet_account_path = DerivationPath::from_str(account_path_str).map_err(|e| {
-        KeyDerivationError::DerivationPathParse {
+    let extended_key_derivation_path = DerivationPath::from_str(extended_key_derivation_path)
+        .map_err(|e| KeyDerivationError::DerivationPathParse {
             message: e.to_string(),
-        }
-    })?;
+        })?;
+    let descriptor_derivation_path =
+        DerivationPath::from_str(descriptor_derivation_path).map_err(|e| {
+            KeyDerivationError::DerivationPathParse {
+                message: e.to_string(),
+            }
+        })?;
 
-    let account_xpriv = master_xpriv
-        .derive_priv(&secp256k1, &wallet_account_path)
+    let derived_xpriv = master_xpriv
+        .derive_priv(&secp256k1, &extended_key_derivation_path)
         .map_err(|e| KeyDerivationError::Derivation {
             message: e.to_string(),
         })?;
-    let account_xkey: ExtendedKey = account_xpriv.into_extended_key().map_err(|e| {
-        KeyDerivationError::ExtendedKeyFromXPriv {
+
+    let origin: KeySource = (
+        master_xpriv.fingerprint(&secp256k1),
+        extended_key_derivation_path,
+    );
+
+    let derived_xpriv_desc_key: DescriptorKey<Segwitv0> = derived_xpriv
+        .into_descriptor_key(Some(origin), descriptor_derivation_path)
+        .map_err(|e| KeyDerivationError::DescriptorKeyFromXPriv {
             message: e.to_string(),
-        }
-    })?;
+        })?;
 
-    let account_xpub = account_xkey.into_xpub(network, &secp256k1);
-
-    Ok(account_xpub)
+    if let Secret(desc_seckey, _, _) = derived_xpriv_desc_key {
+        let desc_key = match public {
+            true => {
+                let desc_pubkey = desc_seckey.as_public(&secp256k1).map_err(|e| {
+                    KeyDerivationError::DescPubKeyFromDescSecretKey {
+                        message: e.to_string(),
+                    }
+                })?;
+                desc_pubkey.to_string()
+            }
+            false => desc_seckey.to_string(),
+        };
+        Ok(key_to_wpkh_descriptor(&desc_key))
+    } else {
+        Err(KeyDerivationError::DescSecretKeyFromDescKey)
+    }
 }
 
 fn get_account_derivation_path(network: Network) -> &'static str {
@@ -152,18 +195,24 @@ fn get_account_derivation_path(network: Network) -> &'static str {
     }
 }
 
+fn key_to_wpkh_descriptor(key: &str) -> String {
+    let mut desc = "wpkh(".to_string();
+    desc.push_str(key);
+    desc.push(')');
+    desc
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use bdk::bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
-    use bdk::bitcoin::util::bip32::ExtendedPubKey;
     use std::str::FromStr;
 
     // Values used for testing were obtained from https://iancoleman.io/bip39
     const NETWORK: Network = Network::Testnet;
     const MNEMONIC_STR: &str = "between angry ketchup hill admit attitude echo wisdom still barrel coral obscure home museum trick grow magic eagle school tilt loop actress equal law";
-    const MASTER_XPRIV: &str = "tprv8ZgxMBicQKsPeT4bcpTNiHtBXqHRRPh4qMkWP4PahRJCGLd5A32RYUif9PJ8GMChWPB6yFFNGybZRGBFcsb9v9YifukeysfDAHDTzxRrtbi";
-    const ACCOUNT_XPUB: &str = "tpubDCvyR4gGk5U6uqmiEPmJnYodvoGabDj9mN4mG7gTshTWC8aELcNALdtcCntH6Ro6dMv9NnevkCPsCpZ1hWifx2Mt83a1Wiy5GcYhuFd9ocq";
+    const SPEND_DESCRIPTOR: &str = "wpkh([aed2a027]tprv8ZgxMBicQKsPeT4bcpTNiHtBXqHRRPh4qMkWP4PahRJCGLd5A32RYUif9PJ8GMChWPB6yFFNGybZRGBFcsb9v9YifukeysfDAHDTzxRrtbi/84'/1'/0'/0/*)";
+    const WATCH_DESCRIPTOR: &str = "wpkh([aed2a027/84'/1'/0']tpubDCvyR4gGk5U6r1Q1HMQtgZYMD3a9bVyt7Tv9BWgcBCQsff4aqR7arUGPTMaUbVwaH8TeaK924GJr9nHyGPBtqSCD8BCjMnJb1qZFjK4ACfL/0/*)";
     const AUTH_PUB_KEY: &str = "02549b15801b155d32ca3931665361b1d2997ee531859b2d48cebbc2ccf21aac96";
 
     fn mnemonic_str_to_vec(mnemonic_str: &str) -> Vec<String> {
@@ -210,8 +259,14 @@ mod test {
 
         let keys = derive_keys(NETWORK, mnemonic_string).unwrap();
 
-        assert_eq!(keys.master_xpriv, MASTER_XPRIV.to_string());
-        assert_eq!(keys.account_xpub, ACCOUNT_XPUB.to_string());
+        assert_eq!(
+            keys.wallet_descriptors.spend_descriptor,
+            SPEND_DESCRIPTOR.to_string()
+        );
+        assert_eq!(
+            keys.wallet_descriptors.watch_descriptor,
+            WATCH_DESCRIPTOR.to_string()
+        );
         assert_eq!(keys.auth_keypair.public_key, to_vec(AUTH_PUB_KEY).unwrap());
 
         // No need to check that the auth secret_key is correct because here we check the auth
@@ -219,7 +274,7 @@ mod test {
     }
 
     #[test]
-    fn test_keys_encode_decode() {
+    fn test_auth_keys_encode_decode() {
         let mnemonic_string = mnemonic_str_to_vec(MNEMONIC_STR);
 
         let keys = derive_keys(NETWORK, mnemonic_string).unwrap();
@@ -235,12 +290,6 @@ mod test {
             keys.auth_keypair.public_key,
             auth_pub_key.to_public_key().to_bytes()
         );
-
-        let master_xpriv = ExtendedPrivKey::from_str(keys.master_xpriv.as_str()).unwrap();
-        assert_eq!(keys.master_xpriv, master_xpriv.to_string());
-
-        let account_xpub = ExtendedPubKey::from_str(keys.account_xpub.as_str()).unwrap();
-        assert_eq!(keys.account_xpub, account_xpub.to_string());
     }
 
     #[test]
@@ -261,42 +310,5 @@ mod test {
             keypair.public_key,
             public_key_from_secret_key.to_public_key().to_bytes()
         );
-    }
-
-    #[test]
-    fn test_master_and_account_derivation_match() {
-        let secp256k1 = bdk::bitcoin::secp256k1::Secp256k1::new();
-
-        let mnemonic_string = mnemonic_str_to_vec(MNEMONIC_STR);
-
-        let keys = derive_keys(NETWORK, mnemonic_string).unwrap();
-
-        let master_xpriv = ExtendedPrivKey::from_str(keys.master_xpriv.as_str()).unwrap();
-        let account_xpub = ExtendedPubKey::from_str(keys.account_xpub.as_str()).unwrap();
-
-        // `account_xpub` should be the xpub of `master_xpriv` at path "m/84'/1'/0'"
-        // Deriving from the master the public key at "m/84'/1'/0'/0/0" must be equivalent to
-        // deriving from the account the public key at "m/0/0"
-
-        let account_path_str = get_account_derivation_path(NETWORK);
-        let path_from_master =
-            DerivationPath::from_str(format!("{}{}", account_path_str, "/0/0").as_str()).unwrap();
-        let path_from_account = DerivationPath::from_str("m/0/0").unwrap();
-
-        let target_xkey_from_master: ExtendedKey = master_xpriv
-            .derive_priv(&secp256k1, &path_from_master)
-            .unwrap()
-            .into_extended_key()
-            .unwrap();
-        let target_pubkey_from_master = target_xkey_from_master
-            .into_xpub(NETWORK, &secp256k1)
-            .public_key;
-
-        let target_pubkey_from_account = account_xpub
-            .derive_pub(&secp256k1, &path_from_account)
-            .unwrap()
-            .public_key;
-
-        assert_eq!(target_pubkey_from_account, target_pubkey_from_master);
     }
 }
