@@ -1,3 +1,10 @@
+enum Network {
+    "Bitcoin",
+    "Testnet",
+    "Signet",
+    "Regtest",
+};
+
 enum LogLevel {
     "Error",
     "Warn",
@@ -7,16 +14,36 @@ enum LogLevel {
 };
 
 [Error]
-enum WalletGenerationError {
-    "Other",
+enum MnemonicGenerationError {
+    "EntropyGeneration",
+    "MnemonicFromEntropy",
 };
 
-dictionary Wallet {
-    sequence<u8> private_key;
+[Error]
+enum KeyDerivationError {
+    "MnemonicParsing",
+    "ExtendedKeyFromMnemonic",
+    "ExtendedKeyFromXPriv",
+    "XPrivFromExtendedKey",
+    "DerivationPathParse",
+    "Derivation",
+};
+
+dictionary KeyPair {
+    sequence<u8> secret_key;
+    sequence<u8> public_key;
+};
+
+dictionary LipaKeys {
+    KeyPair auth_keypair;
+    string master_xpriv;
+    string account_xpub;
 };
 
 namespace lipabusinesslib {
     void init_native_logger_once(LogLevel min_level);
-    [Throws=WalletGenerationError]
-    Wallet generate_wallet();
+    [Throws=MnemonicGenerationError]
+    sequence<string> generate_mnemonic();
+    [Throws=KeyDerivationError]
+    LipaKeys derive_keys(Network network, sequence<string> mnemonic_string);
 };
