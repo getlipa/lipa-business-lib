@@ -14,7 +14,7 @@ enum LogLevel {
 };
 
 [Error]
-enum MnemonicGenerationError {
+enum KeyGenerationError {
     "EntropyGeneration",
     "MnemonicFromEntropy",
 };
@@ -82,10 +82,12 @@ interface Wallet {
 
 namespace lipabusinesslib {
     void init_native_logger_once(LogLevel min_level);
-    [Throws=MnemonicGenerationError]
+    [Throws=KeyGenerationError]
     sequence<string> generate_mnemonic();
     [Throws=KeyDerivationError]
     LipaKeys derive_keys(Network network, sequence<string> mnemonic_string);
     [Throws=SigningError]
     string sign_message(string message, string secret_key);
+    [Throws=KeyGenerationError]
+    KeyPair generate_keypair();
 };
