@@ -40,9 +40,15 @@ enum WalletError {
     "GetBalance",
 };
 
+[Error]
+enum SigningError {
+    "MessageHashing",
+    "SecretKeyParse",
+};
+
 dictionary KeyPair {
-    sequence<u8> secret_key;
-    sequence<u8> public_key;
+    string secret_key;
+    string public_key;
 };
 
 dictionary Descriptors {
@@ -83,4 +89,6 @@ namespace lipabusinesslib {
     LipaKeys derive_keys(Network network, sequence<string> mnemonic_string);
     [Throws=KeyGenerationError]
     KeyPair generate_keypair();
+    [Throws=SigningError]
+    string sign_message(string message, string secret_key);
 };

@@ -51,3 +51,12 @@ pub enum WalletError {
     #[error("Failed to get balance from bdk::Wallet instance: {message}")]
     GetBalance { message: String },
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum SigningError {
+    #[error("Failed to hash the message: {message}")]
+    MessageHashing { message: String },
+
+    #[error("Failed to parse the secret key: {message}")]
+    SecretKeyParse { message: String },
+}
