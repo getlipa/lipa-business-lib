@@ -1,5 +1,5 @@
 #[derive(Debug, thiserror::Error)]
-pub enum MnemonicGenerationError {
+pub enum KeyGenerationError {
     #[error("Failed to generate entropy: {message}")]
     EntropyGeneration { message: String },
 

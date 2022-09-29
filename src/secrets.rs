@@ -1,4 +1,4 @@
-use crate::errors::{KeyDerivationError, MnemonicGenerationError};
+use crate::errors::{KeyDerivationError, KeyGenerationError};
 use bdk::bitcoin::secp256k1::PublicKey;
 use bdk::bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, KeySource};
 use bdk::bitcoin::Network;
@@ -18,24 +18,23 @@ const BACKEND_AUTH_DERIVATION_PATH: &str = "m";
 const ACCOUNT_DERIVATION_PATH_MAINNET: &str = "m/84'/0'/0'";
 const ACCOUNT_DERIVATION_PATH_TESTNET: &str = "m/84'/1'/0'";
 
-pub fn generate_mnemonic() -> Result<Vec<String>, MnemonicGenerationError> {
+pub fn generate_mnemonic() -> Result<Vec<String>, KeyGenerationError> {
     let entropy = generate_random_bytes()?;
-    let mnemonic = Mnemonic::from_entropy(&entropy).map_err(|e| {
-        MnemonicGenerationError::MnemonicFromEntropy {
+    let mnemonic =
+        Mnemonic::from_entropy(&entropy).map_err(|e| KeyGenerationError::MnemonicFromEntropy {
             message: e.to_string(),
-        }
-    })?;
+        })?;
 
     let mnemonic: Vec<String> = mnemonic.word_iter().map(|s| s.to_string()).collect();
 
     Ok(mnemonic)
 }
 
-fn generate_random_bytes() -> Result<[u8; 32], MnemonicGenerationError> {
+fn generate_random_bytes() -> Result<[u8; 32], KeyGenerationError> {
     let mut bytes = [0u8; 32];
     OsRng
         .try_fill_bytes(&mut bytes)
-        .map_err(|e| MnemonicGenerationError::EntropyGeneration {
+        .map_err(|e| KeyGenerationError::EntropyGeneration {
             message: e.to_string(),
         })?;
     Ok(bytes)
@@ -205,6 +204,23 @@ fn key_to_wpkh_descriptor(key: &str) -> String {
     desc
 }
 
+pub fn generate_keypair() -> Result<KeyPair, KeyGenerationError> {
+    let secp256k1 = bdk::bitcoin::secp256k1::Secp256k1::new();
+
+    let mut rng = bdk::bitcoin::secp256k1::rand::rngs::OsRng::new().map_err(|e| {
+        KeyGenerationError::EntropyGeneration {
+            message: e.to_string(),
+        }
+    })?;
+
+    let (secret_key, public_key) = secp256k1.generate_keypair(&mut rng);
+
+    Ok(KeyPair {
+        secret_key: secret_key.secret_bytes().to_vec(),
+        public_key: public_key.serialize().to_vec(),
+    })
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -298,15 +314,7 @@ mod test {
         );
     }
 
-    #[test]
-    fn test_auth_keys_match() {
-        let mnemonic_string = mnemonic_str_to_vec(MNEMONIC_STR);
-        let mnemonic = Mnemonic::from_str(mnemonic_string.join(" ").as_str()).unwrap();
-
-        let master_xpriv = get_master_xpriv(NETWORK, mnemonic).unwrap();
-
-        let keypair = derive_auth_keypair(master_xpriv).unwrap();
-
+    fn check_keys_match(keypair: KeyPair) {
         let public_key_from_secret_key = PublicKey::from_secret_key(
             &Secp256k1::new(),
             &SecretKey::from_slice(keypair.secret_key.as_slice()).unwrap(),
@@ -316,5 +324,24 @@ mod test {
             keypair.public_key,
             public_key_from_secret_key.to_public_key().to_bytes()
         );
+    }
+
+    #[test]
+    fn test_auth_keys_match() {
+        let mnemonic_string = mnemonic_str_to_vec(MNEMONIC_STR);
+        let mnemonic = Mnemonic::from_str(mnemonic_string.join(" ").as_str()).unwrap();
+
+        let master_xpriv = get_master_xpriv(NETWORK, mnemonic).unwrap();
+
+        let keypair = derive_auth_keypair(master_xpriv).unwrap();
+
+        check_keys_match(keypair);
+    }
+
+    #[test]
+    fn test_generate_keypair() {
+        let keypair = generate_keypair().unwrap();
+
+        check_keys_match(keypair);
     }
 }
