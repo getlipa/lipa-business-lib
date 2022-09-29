@@ -153,7 +153,7 @@ fn get_account_derivation_path(network: Network) -> &'static str {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use super::*;
     use bdk::bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
     use bdk::bitcoin::util::bip32::ExtendedPubKey;
@@ -170,7 +170,7 @@ mod test {
         mnemonic_str.split(' ').map(|s| s.to_string()).collect()
     }
 
-    fn to_vec(hex: &str) -> Option<Vec<u8>> {
+    pub fn to_vec(hex: &str) -> Option<Vec<u8>> {
         let mut out = Vec::with_capacity(hex.len() / 2);
 
         let mut b = 0;
