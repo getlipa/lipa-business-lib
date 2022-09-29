@@ -8,6 +8,7 @@ use bdk::{Balance, SyncOptions};
 pub struct Config {
     pub electrum_url: String,
     pub network: Network,
+    pub watch_descriptor: String,
 }
 
 pub struct Wallet {
@@ -26,9 +27,9 @@ impl Wallet {
         Ok(Self { config, blockchain })
     }
 
-    pub fn get_balance(&self, watch_descriptor: String) -> Result<Balance, WalletError> {
+    pub fn get_balance(&self) -> Result<Balance, WalletError> {
         let wallet = bdk::Wallet::new(
-            &watch_descriptor,
+            &self.config.watch_descriptor,
             None,
             self.config.network,
             MemoryDatabase::default(),
@@ -91,10 +92,11 @@ mod test {
         let wallet = Wallet::new(Config {
             electrum_url: "ssl://electrum.blockstream.info:60002".to_string(),
             network: Network::Testnet,
+            watch_descriptor: WATCH_DESCRIPTOR.to_string(),
         })
         .unwrap();
 
-        let balance = wallet.get_balance(WATCH_DESCRIPTOR.to_string()).unwrap();
+        let balance = wallet.get_balance().unwrap();
 
         assert_eq!(balance.confirmed, 88009);
     }*/

@@ -64,6 +64,7 @@ dictionary LipaKeys {
 dictionary Config {
     string electrum_url;
     Network network;
+    string watch_descriptor;
 };
 
 dictionary Balance {
@@ -77,7 +78,7 @@ interface Wallet {
     [Throws=WalletError]
     constructor(Config config);
     [Throws=WalletError]
-    Balance get_balance(string watch_descriptor);
+    Balance get_balance();
 };
 
 namespace lipabusinesslib {
