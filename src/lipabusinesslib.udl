@@ -36,8 +36,8 @@ enum SigningError {
 };
 
 dictionary KeyPair {
-    sequence<u8> secret_key;
-    sequence<u8> public_key;
+    string secret_key;
+    string public_key;
 };
 
 dictionary LipaKeys {
@@ -53,5 +53,5 @@ namespace lipabusinesslib {
     [Throws=KeyDerivationError]
     LipaKeys derive_keys(Network network, sequence<string> mnemonic_string);
     [Throws=SigningError]
-    string sign_message(string message, sequence<u8> secret_key);
+    string sign_message(string message, string secret_key);
 };

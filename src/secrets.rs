@@ -1,4 +1,5 @@
 use crate::errors::{KeyDerivationError, MnemonicGenerationError};
+use crate::hex_utils::hex_str;
 use bdk::bitcoin::secp256k1::PublicKey;
 use bdk::bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey};
 use bdk::bitcoin::Network;
@@ -37,8 +38,8 @@ fn generate_random_bytes() -> Result<[u8; 32], MnemonicGenerationError> {
 }
 
 pub struct KeyPair {
-    pub secret_key: Vec<u8>,
-    pub public_key: Vec<u8>,
+    pub secret_key: String,
+    pub public_key: String,
 }
 
 pub struct LipaKeys {
@@ -92,8 +93,8 @@ fn derive_auth_keypair(master_xpriv: ExtendedPrivKey) -> Result<KeyPair, KeyDeri
         .to_bytes();
 
     Ok(KeyPair {
-        secret_key: auth_priv_key,
-        public_key: auth_pub_key,
+        secret_key: hex_str(&auth_priv_key),
+        public_key: hex_str(&auth_pub_key),
     })
 }
 
@@ -155,6 +156,7 @@ fn get_account_derivation_path(network: Network) -> &'static str {
 #[cfg(test)]
 pub mod test {
     use super::*;
+    use crate::hex_utils::to_vec;
     use bdk::bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
     use bdk::bitcoin::util::bip32::ExtendedPubKey;
     use std::str::FromStr;
@@ -168,27 +170,6 @@ pub mod test {
 
     fn mnemonic_str_to_vec(mnemonic_str: &str) -> Vec<String> {
         mnemonic_str.split(' ').map(|s| s.to_string()).collect()
-    }
-
-    pub fn to_vec(hex: &str) -> Option<Vec<u8>> {
-        let mut out = Vec::with_capacity(hex.len() / 2);
-
-        let mut b = 0;
-        for (idx, c) in hex.as_bytes().iter().enumerate() {
-            b <<= 4;
-            match *c {
-                b'A'..=b'F' => b |= c - b'A' + 10,
-                b'a'..=b'f' => b |= c - b'a' + 10,
-                b'0'..=b'9' => b |= c - b'0',
-                _ => return None,
-            }
-            if (idx & 1) == 1 {
-                out.push(b);
-                b = 0;
-            }
-        }
-
-        Some(out)
     }
 
     #[test]
@@ -212,7 +193,7 @@ pub mod test {
 
         assert_eq!(keys.master_xpriv, MASTER_XPRIV.to_string());
         assert_eq!(keys.account_xpub, ACCOUNT_XPUB.to_string());
-        assert_eq!(keys.auth_keypair.public_key, to_vec(AUTH_PUB_KEY).unwrap());
+        assert_eq!(keys.auth_keypair.public_key, AUTH_PUB_KEY);
 
         // No need to check that the auth secret_key is correct because here we check the auth
         // public key and in `test_auth_keys_match()` we check that the keys match.
@@ -224,16 +205,20 @@ pub mod test {
 
         let keys = derive_keys(NETWORK, mnemonic_string).unwrap();
 
-        let auth_priv_key = SecretKey::from_slice(keys.auth_keypair.secret_key.as_slice()).unwrap();
+        let auth_priv_key =
+            SecretKey::from_slice(to_vec(&keys.auth_keypair.secret_key).unwrap().as_slice())
+                .unwrap();
         assert_eq!(
             keys.auth_keypair.secret_key,
-            auth_priv_key.secret_bytes().to_vec()
+            hex_str(&auth_priv_key.secret_bytes().to_vec())
         );
 
-        let auth_pub_key = PublicKey::from_slice(keys.auth_keypair.public_key.as_slice()).unwrap();
+        let auth_pub_key =
+            PublicKey::from_slice(to_vec(&keys.auth_keypair.public_key).unwrap().as_slice())
+                .unwrap();
         assert_eq!(
             keys.auth_keypair.public_key,
-            auth_pub_key.to_public_key().to_bytes()
+            hex_str(&auth_pub_key.to_public_key().to_bytes())
         );
 
         let master_xpriv = ExtendedPrivKey::from_str(keys.master_xpriv.as_str()).unwrap();
@@ -254,12 +239,12 @@ pub mod test {
 
         let public_key_from_secret_key = PublicKey::from_secret_key(
             &Secp256k1::new(),
-            &SecretKey::from_slice(keypair.secret_key.as_slice()).unwrap(),
+            &SecretKey::from_slice(to_vec(&keypair.secret_key).unwrap().as_slice()).unwrap(),
         );
 
         assert_eq!(
             keypair.public_key,
-            public_key_from_secret_key.to_public_key().to_bytes()
+            hex_str(&public_key_from_secret_key.to_public_key().to_bytes())
         );
     }
 

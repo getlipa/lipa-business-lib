@@ -1,6 +1,7 @@
 extern crate core;
 
 mod errors;
+mod hex_utils;
 mod native_logger;
 mod secrets;
 mod signing;
