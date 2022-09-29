@@ -13,7 +13,10 @@ use secp256k1::hashes::hex::ToHex;
 use secp256k1::SECP256K1;
 use std::str::FromStr;
 
-const BACKEND_AUTH_DERIVATION_PATH: &str = "m/76738065'/0'/0";
+// In the near future we want to migrate to the following keys for backend auth
+//const BACKEND_AUTH_DERIVATION_PATH: &str = "m/76738065'/0'/0";
+// For now, we use the master key pair
+const BACKEND_AUTH_DERIVATION_PATH: &str = "m";
 const ACCOUNT_DERIVATION_PATH_MAINNET: &str = "m/84'/0'/0'";
 const ACCOUNT_DERIVATION_PATH_TESTNET: &str = "m/84'/1'/0'";
 
@@ -214,7 +217,11 @@ pub mod test {
     const MNEMONIC_STR: &str = "between angry ketchup hill admit attitude echo wisdom still barrel coral obscure home museum trick grow magic eagle school tilt loop actress equal law";
     const SPEND_DESCRIPTOR: &str = "wpkh([aed2a027]tprv8ZgxMBicQKsPeT4bcpTNiHtBXqHRRPh4qMkWP4PahRJCGLd5A32RYUif9PJ8GMChWPB6yFFNGybZRGBFcsb9v9YifukeysfDAHDTzxRrtbi/84'/1'/0'/0/*)";
     const WATCH_DESCRIPTOR: &str = "wpkh([aed2a027/84'/1'/0']tpubDCvyR4gGk5U6r1Q1HMQtgZYMD3a9bVyt7Tv9BWgcBCQsff4aqR7arUGPTMaUbVwaH8TeaK924GJr9nHyGPBtqSCD8BCjMnJb1qZFjK4ACfL/0/*)";
-    const AUTH_PUB_KEY: &str = "02549b15801b155d32ca3931665361b1d2997ee531859b2d48cebbc2ccf21aac96";
+
+    // The following corresponds to path "m/76738065'/0'/0"
+    //const AUTH_PUB_KEY: &str = "02549b15801b155d32ca3931665361b1d2997ee531859b2d48cebbc2ccf21aac96";
+    // For now we'll use the master key pair
+    const AUTH_PUB_KEY: &str = "0365704b042bdf2a8bf19714902242f9275ce7b0e2438a35dbb25133c49d1c8ef2";
 
     fn mnemonic_str_to_vec(mnemonic_str: &str) -> Vec<String> {
         mnemonic_str.split(' ').map(|s| s.to_string()).collect()
