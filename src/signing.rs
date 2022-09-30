@@ -2,11 +2,9 @@ use crate::errors::SigningError;
 use crate::hex_utils::to_vec;
 use bdk::bitcoin::secp256k1::SecretKey;
 use secp256k1::hashes::sha256;
-use secp256k1::Message;
+use secp256k1::{Message, SECP256K1};
 
 pub fn sign_message(message: String, secret_key: String) -> Result<String, SigningError> {
-    let secp256k1 = secp256k1::Secp256k1::new();
-
     let message = Message::from_hashed_data::<sha256::Hash>(message.as_bytes());
     let secret_key_bytes = match to_vec(&secret_key) {
         None => {
@@ -22,7 +20,7 @@ pub fn sign_message(message: String, secret_key: String) -> Result<String, Signi
         }
     })?;
 
-    let sig = secp256k1.sign_ecdsa(&message, &secret_key);
+    let sig = SECP256K1.sign_ecdsa(&message, &secret_key);
 
     Ok(sig.to_string())
 }
@@ -36,6 +34,7 @@ mod test {
     use bdk::bitcoin::secp256k1::{Error, Message, PublicKey};
     use bdk::bitcoin::Network;
     use secp256k1::hashes::sha256;
+    use secp256k1::SECP256K1;
     use std::str::FromStr;
 
     const MESSAGE_STR: &str = "Hello world!";
@@ -50,13 +49,11 @@ mod test {
     const SIG_GOLDEN: &str = "30440220059114b338f0c3f4449d76d75db28593c2e0419378f254fe5537f51180beaf7202202845666cd96056d90e8664c1d4af712a05bfa93a88907b762bd00a4366944c41";
 
     fn verify_sig(message: String, signature: String, public_key: String) -> Result<(), Error> {
-        let secp256k1 = bdk::bitcoin::secp256k1::Secp256k1::new();
-
         let message = Message::from_hashed_data::<sha256::Hash>(message.as_bytes());
         let signature = Signature::from_str(&signature).unwrap();
         let public_key = PublicKey::from_slice(to_vec(&public_key).unwrap().as_slice()).unwrap();
 
-        secp256k1.verify_ecdsa(&message, &signature, &public_key)
+        SECP256K1.verify_ecdsa(&message, &signature, &public_key)
     }
 
     #[test]

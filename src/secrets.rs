@@ -8,6 +8,7 @@ use bdk::keys::{DerivableKey, ExtendedKey};
 use bdk::miniscript::ToPublicKey;
 use rand::rngs::OsRng;
 use rand::RngCore;
+use secp256k1::SECP256K1;
 use std::str::FromStr;
 
 const BACKEND_AUTH_DERIVATION_PATH: &str = "m/76738065'/0'/0";
@@ -72,8 +73,6 @@ pub fn derive_keys(
 }
 
 fn derive_auth_keypair(master_xpriv: ExtendedPrivKey) -> Result<KeyPair, KeyDerivationError> {
-    let secp256k1 = bdk::bitcoin::secp256k1::Secp256k1::new();
-
     let lipa_purpose_path =
         DerivationPath::from_str(BACKEND_AUTH_DERIVATION_PATH).map_err(|e| {
             KeyDerivationError::DerivationPathParse {
@@ -81,14 +80,14 @@ fn derive_auth_keypair(master_xpriv: ExtendedPrivKey) -> Result<KeyPair, KeyDeri
             }
         })?;
     let auth_xpriv = master_xpriv
-        .derive_priv(&secp256k1, &lipa_purpose_path)
+        .derive_priv(SECP256K1, &lipa_purpose_path)
         .map_err(|e| KeyDerivationError::Derivation {
             message: e.to_string(),
         })?;
 
     let auth_priv_key = auth_xpriv.private_key.secret_bytes().to_vec();
 
-    let auth_pub_key = PublicKey::from_secret_key(&secp256k1, &auth_xpriv.private_key)
+    let auth_pub_key = PublicKey::from_secret_key(SECP256K1, &auth_xpriv.private_key)
         .to_public_key()
         .to_bytes();
 
@@ -119,8 +118,6 @@ fn derive_account_xpub(
     network: Network,
     master_xpriv: ExtendedPrivKey,
 ) -> Result<ExtendedPubKey, KeyDerivationError> {
-    let secp256k1 = bdk::bitcoin::secp256k1::Secp256k1::new();
-
     let account_path_str = get_account_derivation_path(network);
     let wallet_account_path = DerivationPath::from_str(account_path_str).map_err(|e| {
         KeyDerivationError::DerivationPathParse {
@@ -129,7 +126,7 @@ fn derive_account_xpub(
     })?;
 
     let account_xpriv = master_xpriv
-        .derive_priv(&secp256k1, &wallet_account_path)
+        .derive_priv(SECP256K1, &wallet_account_path)
         .map_err(|e| KeyDerivationError::Derivation {
             message: e.to_string(),
         })?;
@@ -139,7 +136,7 @@ fn derive_account_xpub(
         }
     })?;
 
-    let account_xpub = account_xkey.into_xpub(network, &secp256k1);
+    let account_xpub = account_xkey.into_xpub(network, SECP256K1);
 
     Ok(account_xpub)
 }
@@ -157,7 +154,7 @@ fn get_account_derivation_path(network: Network) -> &'static str {
 pub mod test {
     use super::*;
     use crate::hex_utils::to_vec;
-    use bdk::bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
+    use bdk::bitcoin::secp256k1::{PublicKey, SecretKey};
     use bdk::bitcoin::util::bip32::ExtendedPubKey;
     use std::str::FromStr;
 
@@ -238,7 +235,7 @@ pub mod test {
         let keypair = derive_auth_keypair(master_xpriv).unwrap();
 
         let public_key_from_secret_key = PublicKey::from_secret_key(
-            &Secp256k1::new(),
+            SECP256K1,
             &SecretKey::from_slice(to_vec(&keypair.secret_key).unwrap().as_slice()).unwrap(),
         );
 
@@ -250,8 +247,6 @@ pub mod test {
 
     #[test]
     fn test_master_and_account_derivation_match() {
-        let secp256k1 = bdk::bitcoin::secp256k1::Secp256k1::new();
-
         let mnemonic_string = mnemonic_str_to_vec(MNEMONIC_STR);
 
         let keys = derive_keys(NETWORK, mnemonic_string).unwrap();
@@ -269,16 +264,16 @@ pub mod test {
         let path_from_account = DerivationPath::from_str("m/0/0").unwrap();
 
         let target_xkey_from_master: ExtendedKey = master_xpriv
-            .derive_priv(&secp256k1, &path_from_master)
+            .derive_priv(SECP256K1, &path_from_master)
             .unwrap()
             .into_extended_key()
             .unwrap();
         let target_pubkey_from_master = target_xkey_from_master
-            .into_xpub(NETWORK, &secp256k1)
+            .into_xpub(NETWORK, SECP256K1)
             .public_key;
 
         let target_pubkey_from_account = account_xpub
-            .derive_pub(&secp256k1, &path_from_account)
+            .derive_pub(SECP256K1, &path_from_account)
             .unwrap()
             .public_key;
 
