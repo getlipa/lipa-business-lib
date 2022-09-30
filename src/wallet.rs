@@ -74,30 +74,3 @@ impl Wallet {
         Ok(address.to_string())
     }*/
 }
-
-// The following test is commented out because it relies on an external service but
-// it should work if uncommented.
-// TODO: change test blockchain backend to a local instance
-#[cfg(test)]
-mod test {
-
-    //use crate::{Config, Wallet};
-    //use bdk::bitcoin::Network;
-
-    //const WATCH_DESCRIPTOR: &str = "wpkh([aed2a027/84'/1'/0']tpubDCvyR4gGk5U6r1Q1HMQtgZYMD3a9bVyt7Tv9BWgcBCQsff4aqR7arUGPTMaUbVwaH8TeaK924GJr9nHyGPBtqSCD8BCjMnJb1qZFjK4ACfL/0/*)";
-
-    /*
-    #[test]
-    fn test_get_balance() {
-        let wallet = Wallet::new(Config {
-            electrum_url: "ssl://electrum.blockstream.info:60002".to_string(),
-            network: Network::Testnet,
-            watch_descriptor: WATCH_DESCRIPTOR.to_string(),
-        })
-        .unwrap();
-
-        let balance = wallet.get_balance().unwrap();
-
-        assert_eq!(balance.confirmed, 88009);
-    }*/
-}

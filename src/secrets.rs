@@ -70,18 +70,8 @@ pub fn derive_keys(
     let master_xpriv = get_master_xpriv(network, mnemonic)?;
 
     let auth_keypair = derive_auth_keypair(master_xpriv)?;
-    let spend_descriptor = build_descriptor(
-        master_xpriv,
-        "m",
-        format!("{}{}", get_account_derivation_path(network), "/0").as_str(),
-        false,
-    )?;
-    let watch_descriptor = build_descriptor(
-        master_xpriv,
-        get_account_derivation_path(network),
-        "m/0",
-        true,
-    )?;
+    let spend_descriptor = build_spend_descriptor(network, master_xpriv)?;
+    let watch_descriptor = build_watch_descriptor(network, master_xpriv)?;
 
     Ok(LipaKeys {
         auth_keypair,
@@ -134,20 +124,59 @@ fn get_master_xpriv(
     Ok(master_xpriv)
 }
 
+fn build_spend_descriptor(
+    network: Network,
+    master_xpriv: ExtendedPrivKey,
+) -> Result<String, KeyDerivationError> {
+    // Directly embed the master extended key in the descriptor
+    let origin_path = "m";
+
+    // Provide a BIP84 derivation path for the descriptor. It's built from the
+    // account derivation path concatenated with the "change" path ("/0")
+    let key_path = format!("{}{}", get_account_derivation_path(network), "/0");
+
+    build_descriptor(master_xpriv, origin_path, key_path.as_str(), false)
+}
+
+fn build_watch_descriptor(
+    network: Network,
+    master_xpriv: ExtendedPrivKey,
+) -> Result<String, KeyDerivationError> {
+    // Embed the account level extended key in the descriptor
+    let origin_path = get_account_derivation_path(network);
+
+    // The extended key in the descriptor is already the account-level one so we just need to set
+    // the remaining part of the path
+    let key_path = "m/0";
+
+    build_descriptor(master_xpriv, origin_path, key_path, true)
+}
+
+/// Builds a descriptor
+///
+/// * Parameters:
+/// - `master_xpriv`: Master xpriv
+/// - `origin_derivation_path`: the xkey that is embedded in the descriptor will be derived
+/// from the master xpriv using this path
+/// - `key_derivation_path`: this is the derivation path that is applied to the embedded xkey when
+/// using the built descriptor
+/// - `public`: if true, the embedded xkey will be an xpub, otherwise will be an xpriv
 fn build_descriptor(
     master_xpriv: ExtendedPrivKey,
-    extended_key_derivation_path: &str,
-    descriptor_derivation_path: &str,
+    origin_derivation_path: &str,
+    key_derivation_path: &str,
     public: bool,
 ) -> Result<String, KeyDerivationError> {
     let secp256k1 = bdk::bitcoin::secp256k1::Secp256k1::new();
 
-    let extended_key_derivation_path = DerivationPath::from_str(extended_key_derivation_path)
-        .map_err(|e| KeyDerivationError::DerivationPathParse {
-            message: e.to_string(),
+    let extended_key_derivation_path =
+        DerivationPath::from_str(origin_derivation_path).map_err(|e| {
+            KeyDerivationError::DerivationPathParse {
+                message: e.to_string(),
+            }
         })?;
     let descriptor_derivation_path =
-        DerivationPath::from_str(descriptor_derivation_path).map_err(|e| {
+        DerivationPath::from_str(key_derivation_path).map_err(|e| {
             KeyDerivationError::DerivationPathParse {
                 message: e.to_string(),
             }
@@ -166,7 +195,7 @@ fn build_descriptor(
 
     let derived_xpriv_desc_key: DescriptorKey<Segwitv0> = derived_xpriv
         .into_descriptor_key(Some(origin), descriptor_derivation_path)
-        .map_err(|e| KeyDerivationError::DescriptorKeyFromXPriv {
+        .map_err(|e| KeyDerivationError::DescKeyFromXPriv {
             message: e.to_string(),
         })?;
 

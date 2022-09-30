@@ -10,7 +10,7 @@ use crate::secrets::{
     derive_keys, generate_keypair, generate_mnemonic, Descriptors, KeyPair, LipaKeys,
 };
 use crate::signing::sign_message;
-use crate::wallet::{Config, Wallet};
+pub use crate::wallet::{Config, Wallet};
 
 use bdk::bitcoin::Network;
 use bdk::Balance;

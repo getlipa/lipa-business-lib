@@ -21,21 +21,21 @@ enum KeyGenerationError {
 
 [Error]
 enum KeyDerivationError {
-    "MnemonicParsing",
-    "ExtendedKeyFromMnemonic",
-    "ExtendedKeyFromXPriv",
-    "XPrivFromExtendedKey",
-    "DerivationPathParse",
     "Derivation",
-    "DescriptorKeyFromXPriv",
+    "DerivationPathParse",
+    "DescKeyFromXPriv",
     "DescPubKeyFromDescSecretKey",
     "DescSecretKeyFromDescKey",
+    "ExtendedKeyFromMnemonic",
+    "ExtendedKeyFromXPriv",
+    "MnemonicParsing",
+    "XPrivFromExtendedKey",
 };
 
 [Error]
 enum WalletError {
-    "ChainBackendClient",
     "BdkWallet",
+    "ChainBackendClient",
     "ChainSync",
     "GetBalance",
 };
