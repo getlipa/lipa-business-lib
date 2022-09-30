@@ -4,6 +4,7 @@ use bdk::blockchain::ElectrumBlockchain;
 use bdk::database::MemoryDatabase;
 use bdk::electrum_client::Client;
 use bdk::{Balance, SyncOptions};
+use std::sync::{Arc, Mutex};
 
 pub struct Config {
     pub electrum_url: String,
@@ -12,8 +13,8 @@ pub struct Config {
 }
 
 pub struct Wallet {
-    config: Config,
     blockchain: ElectrumBlockchain,
+    wallet: Arc<Mutex<bdk::Wallet<MemoryDatabase>>>,
 }
 
 impl Wallet {
@@ -24,19 +25,22 @@ impl Wallet {
             })?;
         let blockchain = ElectrumBlockchain::from(client);
 
-        Ok(Self { config, blockchain })
-    }
-
-    pub fn get_balance(&self) -> Result<Balance, WalletError> {
         let wallet = bdk::Wallet::new(
-            &self.config.watch_descriptor,
+            &config.watch_descriptor,
             None,
-            self.config.network,
+            config.network,
             MemoryDatabase::default(),
         )
         .map_err(|e| WalletError::BdkWallet {
             message: e.to_string(),
         })?;
+        let wallet = Arc::new(Mutex::new(wallet));
+
+        Ok(Self { blockchain, wallet })
+    }
+
+    pub fn get_balance(&self) -> Result<Balance, WalletError> {
+        let wallet = self.wallet.lock().unwrap();
 
         wallet
             .sync(&self.blockchain, SyncOptions::default())
