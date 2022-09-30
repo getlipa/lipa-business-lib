@@ -65,6 +65,7 @@ dictionary Config {
     string electrum_url;
     Network network;
     string watch_descriptor;
+    string db_path;
 };
 
 dictionary Balance {
