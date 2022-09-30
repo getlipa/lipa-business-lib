@@ -38,6 +38,8 @@ enum WalletError {
     "ChainBackendClient",
     "ChainSync",
     "GetBalance",
+    "OpenDatabase",
+    "OpenDatabaseTree",
 };
 
 [Error]
@@ -63,6 +65,7 @@ dictionary LipaKeys {
 
 dictionary Config {
     string electrum_url;
+    string wallet_db_path;
     Network network;
     string watch_descriptor;
 };

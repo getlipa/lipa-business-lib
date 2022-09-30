@@ -50,6 +50,12 @@ pub enum WalletError {
 
     #[error("Failed to get balance from bdk::Wallet instance: {message}")]
     GetBalance { message: String },
+
+    #[error("Failed to open database for bdk::Wallet: {message}")]
+    OpenDatabase { message: String },
+
+    #[error("Failed to open database tree for bdk::Wallet: {message}")]
+    OpenDatabaseTree { message: String },
 }
 
 #[derive(Debug, thiserror::Error)]

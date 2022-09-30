@@ -1,20 +1,22 @@
 use crate::errors::WalletError;
 use bdk::bitcoin::Network;
 use bdk::blockchain::ElectrumBlockchain;
-use bdk::database::MemoryDatabase;
 use bdk::electrum_client::Client;
+use bdk::sled::Tree;
 use bdk::{Balance, SyncOptions};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 pub struct Config {
     pub electrum_url: String,
+    pub wallet_db_path: String,
     pub network: Network,
     pub watch_descriptor: String,
 }
 
 pub struct Wallet {
     blockchain: ElectrumBlockchain,
-    wallet: Arc<Mutex<bdk::Wallet<MemoryDatabase>>>,
+    wallet: Arc<Mutex<bdk::Wallet<Tree>>>,
 }
 
 impl Wallet {
@@ -25,15 +27,20 @@ impl Wallet {
             })?;
         let blockchain = ElectrumBlockchain::from(client);
 
-        let wallet = bdk::Wallet::new(
-            &config.watch_descriptor,
-            None,
-            config.network,
-            MemoryDatabase::default(),
-        )
-        .map_err(|e| WalletError::BdkWallet {
+        let db_path = Path::new(&config.wallet_db_path);
+        let db = sled::open(db_path).map_err(|e| WalletError::OpenDatabase {
             message: e.to_string(),
         })?;
+        let db_tree =
+            db.open_tree("bdk-wallet-database")
+                .map_err(|e| WalletError::OpenDatabaseTree {
+                    message: e.to_string(),
+                })?;
+
+        let wallet = bdk::Wallet::new(&config.watch_descriptor, None, config.network, db_tree)
+            .map_err(|e| WalletError::BdkWallet {
+                message: e.to_string(),
+            })?;
         let wallet = Arc::new(Mutex::new(wallet));
 
         Ok(Self { blockchain, wallet })

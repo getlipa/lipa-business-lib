@@ -3,6 +3,8 @@
 
 /bindings
 
+.bdk-database
+
 # Added by cargo
 /target
 /Cargo.lock
