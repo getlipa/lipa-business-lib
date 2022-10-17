@@ -135,7 +135,12 @@ fn build_spend_descriptor(
     // account derivation path concatenated with the "change" path ("/0")
     let key_path = format!("{}{}", get_account_derivation_path(network), "/0");
 
-    build_descriptor(master_xpriv, origin_path, key_path.as_str(), false)
+    build_descriptor(
+        master_xpriv,
+        origin_path,
+        key_path.as_str(),
+        DescriptorKind::Private,
+    )
 }
 
 fn build_watch_descriptor(
@@ -149,7 +154,12 @@ fn build_watch_descriptor(
     // the remaining part of the path
     let key_path = "m/0";
 
-    build_descriptor(master_xpriv, origin_path, key_path, true)
+    build_descriptor(master_xpriv, origin_path, key_path, DescriptorKind::Public)
+}
+
+enum DescriptorKind {
+    Public,
+    Private,
 }
 
 /// Builds a descriptor
@@ -165,10 +175,8 @@ fn build_descriptor(
     master_xpriv: ExtendedPrivKey,
     origin_derivation_path: &str,
     key_derivation_path: &str,
-    public: bool,
+    kind: DescriptorKind,
 ) -> Result<String, KeyDerivationError> {
-    let secp256k1 = bdk::bitcoin::secp256k1::Secp256k1::new();
-
     let extended_key_derivation_path =
         DerivationPath::from_str(origin_derivation_path).map_err(|e| {
             KeyDerivationError::DerivationPathParse {
@@ -183,13 +191,13 @@ fn build_descriptor(
         })?;
 
     let derived_xpriv = master_xpriv
-        .derive_priv(&secp256k1, &extended_key_derivation_path)
+        .derive_priv(SECP256K1, &extended_key_derivation_path)
         .map_err(|e| KeyDerivationError::Derivation {
             message: e.to_string(),
         })?;
 
     let origin: KeySource = (
-        master_xpriv.fingerprint(&secp256k1),
+        master_xpriv.fingerprint(SECP256K1),
         extended_key_derivation_path,
     );
 
@@ -200,16 +208,16 @@ fn build_descriptor(
         })?;
 
     if let Secret(desc_seckey, _, _) = derived_xpriv_desc_key {
-        let desc_key = match public {
-            true => {
-                let desc_pubkey = desc_seckey.as_public(&secp256k1).map_err(|e| {
+        let desc_key = match kind {
+            DescriptorKind::Public => {
+                let desc_pubkey = desc_seckey.as_public(SECP256K1).map_err(|e| {
                     KeyDerivationError::DescPubKeyFromDescSecretKey {
                         message: e.to_string(),
                     }
                 })?;
                 desc_pubkey.to_string()
             }
-            false => desc_seckey.to_string(),
+            DescriptorKind::Private => desc_seckey.to_string(),
         };
         Ok(key_to_wpkh_descriptor(&desc_key))
     } else {
@@ -227,22 +235,16 @@ fn get_account_derivation_path(network: Network) -> &'static str {
 }
 
 fn key_to_wpkh_descriptor(key: &str) -> String {
-    let mut desc = "wpkh(".to_string();
-    desc.push_str(key);
-    desc.push(')');
-    desc
+    format!("wpkh({})", key)
 }
 
 pub fn generate_keypair() -> Result<KeyPair, KeyGenerationError> {
-    let secp256k1 = bdk::bitcoin::secp256k1::Secp256k1::new();
-
-    let mut rng = bdk::bitcoin::secp256k1::rand::rngs::OsRng::new().map_err(|e| {
-        KeyGenerationError::EntropyGeneration {
+    let mut rng =
+        secp256k1::rand::rngs::OsRng::new().map_err(|e| KeyGenerationError::EntropyGeneration {
             message: e.to_string(),
-        }
-    })?;
+        })?;
 
-    let (secret_key, public_key) = secp256k1.generate_keypair(&mut rng);
+    let (secret_key, public_key) = SECP256K1.generate_keypair(&mut rng);
 
     Ok(KeyPair {
         secret_key: secret_key.secret_bytes().to_hex(),

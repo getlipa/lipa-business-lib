@@ -46,7 +46,7 @@ impl Wallet {
         Ok(Self { blockchain, wallet })
     }
 
-    pub fn get_balance(&self) -> Result<Balance, WalletError> {
+    pub fn sync_balance(&self) -> Result<Balance, WalletError> {
         let wallet = self.wallet.lock().unwrap();
 
         wallet

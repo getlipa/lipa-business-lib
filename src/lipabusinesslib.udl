@@ -81,7 +81,7 @@ interface Wallet {
     [Throws=WalletError]
     constructor(Config config);
     [Throws=WalletError]
-    Balance get_balance();
+    Balance sync_balance();
 };
 
 namespace lipabusinesslib {

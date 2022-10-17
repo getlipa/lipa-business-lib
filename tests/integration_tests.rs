@@ -13,7 +13,7 @@ fn test_get_balance_testnet_electrum() {
     })
     .unwrap();
 
-    let balance = wallet.get_balance().unwrap();
+    let balance = wallet.sync_balance().unwrap();
 
     assert_eq!(balance.confirmed, 88009);
 }
