@@ -1,19 +1,15 @@
 use crate::errors::SigningError;
-use crate::hex_utils::to_vec;
 use bdk::bitcoin::secp256k1::SecretKey;
+use secp256k1::hashes::hex::FromHex;
 use secp256k1::hashes::sha256;
 use secp256k1::{Message, SECP256K1};
 
 pub fn sign_message(message: String, secret_key: String) -> Result<String, SigningError> {
     let message = Message::from_hashed_data::<sha256::Hash>(message.as_bytes());
-    let secret_key_bytes = match to_vec(&secret_key) {
-        None => {
-            return Err(SigningError::SecretKeyParse {
-                message: "The provided string contains non-hex characters".to_string(),
-            })
-        }
-        Some(bytes) => bytes,
-    };
+    let secret_key_bytes =
+        Vec::from_hex(&secret_key).map_err(|e| SigningError::SecretKeyParse {
+            message: e.to_string(),
+        })?;
     let secret_key = SecretKey::from_slice(secret_key_bytes.as_slice()).map_err(|e| {
         SigningError::SecretKeyParse {
             message: e.to_string(),
@@ -22,17 +18,17 @@ pub fn sign_message(message: String, secret_key: String) -> Result<String, Signi
 
     let sig = SECP256K1.sign_ecdsa(&message, &secret_key);
 
-    Ok(sig.to_string())
+    Ok(sig.serialize_der().to_string())
 }
 
 #[cfg(test)]
 mod test {
-    use crate::hex_utils::to_vec;
     use crate::signing::sign_message;
     use crate::{derive_keys, generate_mnemonic};
     use bdk::bitcoin::secp256k1::ecdsa::Signature;
     use bdk::bitcoin::secp256k1::{Error, Message, PublicKey};
     use bdk::bitcoin::Network;
+    use secp256k1::hashes::hex::FromHex;
     use secp256k1::hashes::sha256;
     use secp256k1::SECP256K1;
     use std::str::FromStr;
@@ -51,7 +47,8 @@ mod test {
     fn verify_sig(message: String, signature: String, public_key: String) -> Result<(), Error> {
         let message = Message::from_hashed_data::<sha256::Hash>(message.as_bytes());
         let signature = Signature::from_str(&signature).unwrap();
-        let public_key = PublicKey::from_slice(to_vec(&public_key).unwrap().as_slice()).unwrap();
+        let public_key =
+            PublicKey::from_slice(Vec::from_hex(&public_key).unwrap().as_slice()).unwrap();
 
         SECP256K1.verify_ecdsa(&message, &signature, &public_key)
     }

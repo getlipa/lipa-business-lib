@@ -1,5 +1,4 @@
 use crate::errors::{KeyDerivationError, MnemonicGenerationError};
-use crate::hex_utils::hex_str;
 use bdk::bitcoin::secp256k1::PublicKey;
 use bdk::bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey};
 use bdk::bitcoin::Network;
@@ -8,6 +7,7 @@ use bdk::keys::{DerivableKey, ExtendedKey};
 use bdk::miniscript::ToPublicKey;
 use rand::rngs::OsRng;
 use rand::RngCore;
+use secp256k1::hashes::hex::ToHex;
 use secp256k1::SECP256K1;
 use std::str::FromStr;
 
@@ -92,8 +92,8 @@ fn derive_auth_keypair(master_xpriv: ExtendedPrivKey) -> Result<KeyPair, KeyDeri
         .to_bytes();
 
     Ok(KeyPair {
-        secret_key: hex_str(&auth_priv_key),
-        public_key: hex_str(&auth_pub_key),
+        secret_key: auth_priv_key.to_hex(),
+        public_key: auth_pub_key.to_hex(),
     })
 }
 
@@ -153,9 +153,9 @@ fn get_account_derivation_path(network: Network) -> &'static str {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::hex_utils::to_vec;
     use bdk::bitcoin::secp256k1::{PublicKey, SecretKey};
     use bdk::bitcoin::util::bip32::ExtendedPubKey;
+    use secp256k1::hashes::hex::FromHex;
     use std::str::FromStr;
 
     // Values used for testing were obtained from https://iancoleman.io/bip39
@@ -202,20 +202,26 @@ pub mod test {
 
         let keys = derive_keys(NETWORK, mnemonic_string).unwrap();
 
-        let auth_priv_key =
-            SecretKey::from_slice(to_vec(&keys.auth_keypair.secret_key).unwrap().as_slice())
-                .unwrap();
+        let auth_priv_key = SecretKey::from_slice(
+            Vec::from_hex(&keys.auth_keypair.secret_key)
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
         assert_eq!(
             keys.auth_keypair.secret_key,
-            hex_str(&auth_priv_key.secret_bytes().to_vec())
+            auth_priv_key.secret_bytes().to_vec().to_hex()
         );
 
-        let auth_pub_key =
-            PublicKey::from_slice(to_vec(&keys.auth_keypair.public_key).unwrap().as_slice())
-                .unwrap();
+        let auth_pub_key = PublicKey::from_slice(
+            Vec::from_hex(&keys.auth_keypair.public_key)
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
         assert_eq!(
             keys.auth_keypair.public_key,
-            hex_str(&auth_pub_key.to_public_key().to_bytes())
+            auth_pub_key.to_public_key().to_bytes().to_hex()
         );
 
         let master_xpriv = ExtendedPrivKey::from_str(keys.master_xpriv.as_str()).unwrap();
@@ -236,12 +242,15 @@ pub mod test {
 
         let public_key_from_secret_key = PublicKey::from_secret_key(
             SECP256K1,
-            &SecretKey::from_slice(to_vec(&keypair.secret_key).unwrap().as_slice()).unwrap(),
+            &SecretKey::from_slice(Vec::from_hex(&keypair.secret_key).unwrap().as_slice()).unwrap(),
         );
 
         assert_eq!(
             keypair.public_key,
-            hex_str(&public_key_from_secret_key.to_public_key().to_bytes())
+            public_key_from_secret_key
+                .to_public_key()
+                .to_bytes()
+                .to_hex()
         );
     }
 
