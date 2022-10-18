@@ -8,7 +8,7 @@ crate-type = ["lib", "staticlib", "cdylib"]
 name = "uniffi_lipabusinesslib"
 
 [dependencies]
-uniffi = "0.20.0"
+uniffi = "0.21.0"
 thiserror = "1.0.36"
 log = "0.4.17"
 bdk = { version = "0.23.0", features = ["keys-bip39"] }
@@ -24,4 +24,4 @@ android_logger = "0.11"
 
 [build-dependencies]
 camino = "1.1.1"
-uniffi_bindgen = "0.20.0"
+uniffi_bindgen = "0.21.0"
