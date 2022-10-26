@@ -4,10 +4,10 @@ use secp256k1::hashes::hex::FromHex;
 use secp256k1::hashes::sha256;
 use secp256k1::{Message, SECP256K1};
 
-pub fn sign_message(message: String, secret_key: String) -> Result<String, SigningError> {
+pub fn sign(message: String, private_key: String) -> Result<String, SigningError> {
     let message = Message::from_hashed_data::<sha256::Hash>(message.as_bytes());
     let secret_key_bytes =
-        Vec::from_hex(&secret_key).map_err(|e| SigningError::SecretKeyParse {
+        Vec::from_hex(&private_key).map_err(|e| SigningError::SecretKeyParse {
             message: e.to_string(),
         })?;
     let secret_key = SecretKey::from_slice(secret_key_bytes.as_slice()).map_err(|e| {
@@ -23,7 +23,7 @@ pub fn sign_message(message: String, secret_key: String) -> Result<String, Signi
 
 #[cfg(test)]
 mod test {
-    use crate::signing::sign_message;
+    use crate::signing::sign;
     use crate::{derive_keys, generate_mnemonic};
     use bdk::bitcoin::secp256k1::ecdsa::Signature;
     use bdk::bitcoin::secp256k1::{Error, Message, PublicKey};
@@ -60,9 +60,9 @@ mod test {
 
         let message = String::from(MESSAGE_STR);
 
-        let sig = sign_message(message.clone(), keys.auth_keypair.secret_key.clone()).unwrap();
+        let sig = sign(message.clone(), keys.wallet_keypair.secret_key.clone()).unwrap();
 
-        verify_sig(message, sig, keys.auth_keypair.public_key).unwrap()
+        verify_sig(message, sig, keys.wallet_keypair.public_key).unwrap()
     }
 
     #[test]
@@ -70,7 +70,7 @@ mod test {
         let private_key = EC_PRIVATE_KEY_HEX.to_string();
         let public_key = EC_PUBLIC_KEY_HEX.to_string();
 
-        let sig = sign_message(MESSAGE_STR.to_string(), private_key).unwrap();
+        let sig = sign(MESSAGE_STR.to_string(), private_key).unwrap();
 
         verify_sig(MESSAGE_STR.to_string(), sig.clone(), public_key).unwrap();
         assert_eq!(sig, SIG_GOLDEN.to_string());

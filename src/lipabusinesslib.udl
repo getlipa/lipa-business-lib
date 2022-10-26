@@ -58,8 +58,8 @@ dictionary Descriptors {
     string watch_descriptor;
 };
 
-dictionary LipaKeys {
-    KeyPair auth_keypair;
+dictionary WalletKeys {
+    KeyPair wallet_keypair;
     Descriptors wallet_descriptors;
 };
 
@@ -89,9 +89,9 @@ namespace lipabusinesslib {
     [Throws=KeyGenerationError]
     sequence<string> generate_mnemonic();
     [Throws=KeyDerivationError]
-    LipaKeys derive_keys(Network network, sequence<string> mnemonic_string);
+    WalletKeys derive_keys(Network network, sequence<string> mnemonic_string);
     [Throws=SigningError]
-    string sign_message(string message, string secret_key);
+    string sign(string message, string private_key);
     [Throws=KeyGenerationError]
     KeyPair generate_keypair();
 };

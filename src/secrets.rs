@@ -52,15 +52,15 @@ pub struct Descriptors {
     pub watch_descriptor: String,
 }
 
-pub struct LipaKeys {
-    pub auth_keypair: KeyPair,
+pub struct WalletKeys {
+    pub wallet_keypair: KeyPair,
     pub wallet_descriptors: Descriptors,
 }
 
 pub fn derive_keys(
     network: Network,
     mnemonic_string: Vec<String>,
-) -> Result<LipaKeys, KeyDerivationError> {
+) -> Result<WalletKeys, KeyDerivationError> {
     let mnemonic = Mnemonic::from_str(mnemonic_string.join(" ").as_str()).map_err(|e| {
         KeyDerivationError::MnemonicParsing {
             message: e.to_string(),
@@ -73,8 +73,8 @@ pub fn derive_keys(
     let spend_descriptor = build_spend_descriptor(network, master_xpriv)?;
     let watch_descriptor = build_watch_descriptor(network, master_xpriv)?;
 
-    Ok(LipaKeys {
-        auth_keypair,
+    Ok(WalletKeys {
+        wallet_keypair: auth_keypair,
         wallet_descriptors: Descriptors {
             spend_descriptor,
             watch_descriptor,
@@ -301,7 +301,7 @@ pub mod test {
             keys.wallet_descriptors.watch_descriptor,
             WATCH_DESCRIPTOR.to_string()
         );
-        assert_eq!(keys.auth_keypair.public_key, AUTH_PUB_KEY.to_string());
+        assert_eq!(keys.wallet_keypair.public_key, AUTH_PUB_KEY.to_string());
 
         // No need to check that the auth secret_key is correct because here we check the auth
         // public key and in `test_auth_keys_match()` we check that the keys match.
@@ -314,24 +314,24 @@ pub mod test {
         let keys = derive_keys(NETWORK, mnemonic_string).unwrap();
 
         let auth_priv_key = SecretKey::from_slice(
-            Vec::from_hex(&keys.auth_keypair.secret_key)
+            Vec::from_hex(&keys.wallet_keypair.secret_key)
                 .unwrap()
                 .as_slice(),
         )
         .unwrap();
         assert_eq!(
-            keys.auth_keypair.secret_key,
+            keys.wallet_keypair.secret_key,
             auth_priv_key.secret_bytes().to_vec().to_hex()
         );
 
         let auth_pub_key = PublicKey::from_slice(
-            Vec::from_hex(&keys.auth_keypair.public_key)
+            Vec::from_hex(&keys.wallet_keypair.public_key)
                 .unwrap()
                 .as_slice(),
         )
         .unwrap();
         assert_eq!(
-            keys.auth_keypair.public_key,
+            keys.wallet_keypair.public_key,
             auth_pub_key.to_public_key().to_bytes().to_hex()
         );
     }
