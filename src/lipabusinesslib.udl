@@ -92,6 +92,5 @@ namespace lipabusinesslib {
     WalletKeys derive_keys(Network network, sequence<string> mnemonic_string);
     [Throws=SigningError]
     string sign(string message, string private_key);
-    [Throws=KeyGenerationError]
     KeyPair generate_keypair();
 };

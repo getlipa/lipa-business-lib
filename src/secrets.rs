@@ -210,7 +210,7 @@ fn build_descriptor(
     if let Secret(desc_seckey, _, _) = derived_xpriv_desc_key {
         let desc_key = match kind {
             DescriptorKind::Public => {
-                let desc_pubkey = desc_seckey.as_public(SECP256K1).map_err(|e| {
+                let desc_pubkey = desc_seckey.to_public(SECP256K1).map_err(|e| {
                     KeyDerivationError::DescPubKeyFromDescSecretKey {
                         message: e.to_string(),
                     }
@@ -238,18 +238,15 @@ fn key_to_wpkh_descriptor(key: &str) -> String {
     format!("wpkh({})", key)
 }
 
-pub fn generate_keypair() -> Result<KeyPair, KeyGenerationError> {
-    let mut rng =
-        secp256k1::rand::rngs::OsRng::new().map_err(|e| KeyGenerationError::EntropyGeneration {
-            message: e.to_string(),
-        })?;
+pub fn generate_keypair() -> KeyPair {
+    let mut rng = rand::rngs::OsRng;
 
     let (secret_key, public_key) = SECP256K1.generate_keypair(&mut rng);
 
-    Ok(KeyPair {
+    KeyPair {
         secret_key: secret_key.secret_bytes().to_hex(),
         public_key: public_key.serialize().to_hex(),
-    })
+    }
 }
 
 #[cfg(test)]
@@ -365,7 +362,7 @@ pub mod test {
 
     #[test]
     fn test_generate_keypair() {
-        let keypair = generate_keypair().unwrap();
+        let keypair = generate_keypair();
 
         check_keys_match(keypair);
     }
