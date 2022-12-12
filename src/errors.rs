@@ -66,3 +66,15 @@ pub enum SigningError {
     #[error("Failed to parse the secret key: {message}")]
     SecretKeyParse { message: String },
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum AddrError {
+    #[error("The provided address is invalid: {message}")]
+    InvalidAddr { message: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum GetStatusError {
+    #[error("Couldn't get the tx status: {message}")]
+    GetStatusFailure { message: String },
+}
