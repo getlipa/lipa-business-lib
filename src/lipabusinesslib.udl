@@ -14,48 +14,10 @@ enum LogLevel {
 };
 
 [Error]
-enum KeyGenerationError {
-    "EntropyGeneration",
-    "MnemonicFromEntropy",
-};
-
-[Error]
-enum KeyDerivationError {
-    "Derivation",
-    "DerivationPathParse",
-    "DescKeyFromXPriv",
-    "DescPubKeyFromDescSecretKey",
-    "DescSecretKeyFromDescKey",
-    "ExtendedKeyFromMnemonic",
-    "ExtendedKeyFromXPriv",
-    "MnemonicParsing",
-    "XPrivFromExtendedKey",
-};
-
-[Error]
-enum WalletError {
-    "BdkWallet",
-    "ChainBackendClient",
-    "ChainSync",
-    "GetBalance",
-    "OpenDatabase",
-    "OpenDatabaseTree",
-};
-
-[Error]
-enum SigningError {
-    "MessageHashing",
-    "SecretKeyParse",
-};
-
-[Error]
-enum AddrError {
-    "InvalidAddr",
-};
-
-[Error]
-enum GetStatusError {
-    "GetStatusFailure",
+enum LipaError {
+    "InvalidInput",
+    "RuntimeError",
+    "PermanentFailure",
 };
 
 dictionary KeyPair {
@@ -93,20 +55,20 @@ enum AddressValidationResult {
 };
 
 interface Wallet {
-    [Throws=WalletError]
+    [Throws=LipaError]
     constructor(Config config);
-    [Throws=WalletError]
+    [Throws=LipaError]
     Balance sync_balance();
 
     AddressValidationResult validate_addr(string addr);
 
-    [Throws=WalletError]
+    [Throws=LipaError]
     Tx prepare_drain_tx(string addr);
 
-    [Throws=WalletError]
+    [Throws=LipaError]
     void sign_and_broadcast_tx(Tx tx, string spend_descriptor);
 
-    [Throws=GetStatusError]
+    [Throws=LipaError]
     TxStatus get_tx_status(string txid);
 };
 
@@ -126,11 +88,11 @@ interface TxStatus {
 
 namespace lipabusinesslib {
     void init_native_logger_once(LogLevel min_level);
-    [Throws=KeyGenerationError]
+    [Throws=LipaError]
     sequence<string> generate_mnemonic();
-    [Throws=KeyDerivationError]
+    [Throws=LipaError]
     WalletKeys derive_keys(Network network, sequence<string> mnemonic_string);
-    [Throws=SigningError]
+    [Throws=LipaError]
     string sign(string message, string private_key);
     KeyPair generate_keypair();
 };

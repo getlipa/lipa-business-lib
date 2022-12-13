@@ -1,4 +1,4 @@
-use crate::errors::{KeyDerivationError, KeyGenerationError};
+use crate::errors::{permanent_failure, LipaResult, MapToLipaError};
 use bdk::bitcoin::secp256k1::PublicKey;
 use bdk::bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, KeySource};
 use bdk::bitcoin::Network;
@@ -20,25 +20,21 @@ const BACKEND_AUTH_DERIVATION_PATH: &str = "m";
 const ACCOUNT_DERIVATION_PATH_MAINNET: &str = "m/84'/0'/0'";
 const ACCOUNT_DERIVATION_PATH_TESTNET: &str = "m/84'/1'/0'";
 
-pub fn generate_mnemonic() -> Result<Vec<String>, KeyGenerationError> {
+pub fn generate_mnemonic() -> LipaResult<Vec<String>> {
     let entropy = generate_random_bytes()?;
-    let mnemonic =
-        Mnemonic::from_entropy(&entropy).map_err(|e| KeyGenerationError::MnemonicFromEntropy {
-            message: e.to_string(),
-        })?;
+    let mnemonic = Mnemonic::from_entropy(&entropy)
+        .map_to_permanent_failure("Failed to get mnemonic from entropy")?;
 
     let mnemonic: Vec<String> = mnemonic.word_iter().map(|s| s.to_string()).collect();
 
     Ok(mnemonic)
 }
 
-fn generate_random_bytes() -> Result<[u8; 32], KeyGenerationError> {
+fn generate_random_bytes() -> LipaResult<[u8; 32]> {
     let mut bytes = [0u8; 32];
     OsRng
         .try_fill_bytes(&mut bytes)
-        .map_err(|e| KeyGenerationError::EntropyGeneration {
-            message: e.to_string(),
-        })?;
+        .map_to_permanent_failure("Failed to generate random bytes using OsRng")?;
     Ok(bytes)
 }
 
@@ -57,15 +53,9 @@ pub struct WalletKeys {
     pub wallet_descriptors: Descriptors,
 }
 
-pub fn derive_keys(
-    network: Network,
-    mnemonic_string: Vec<String>,
-) -> Result<WalletKeys, KeyDerivationError> {
-    let mnemonic = Mnemonic::from_str(mnemonic_string.join(" ").as_str()).map_err(|e| {
-        KeyDerivationError::MnemonicParsing {
-            message: e.to_string(),
-        }
-    })?;
+pub fn derive_keys(network: Network, mnemonic_string: Vec<String>) -> LipaResult<WalletKeys> {
+    let mnemonic = Mnemonic::from_str(mnemonic_string.join(" ").as_str())
+        .map_to_invalid_input("Invalid mnemonic string")?;
 
     let master_xpriv = get_master_xpriv(network, mnemonic)?;
 
@@ -82,18 +72,13 @@ pub fn derive_keys(
     })
 }
 
-fn derive_auth_keypair(master_xpriv: ExtendedPrivKey) -> Result<KeyPair, KeyDerivationError> {
-    let lipa_purpose_path =
-        DerivationPath::from_str(BACKEND_AUTH_DERIVATION_PATH).map_err(|e| {
-            KeyDerivationError::DerivationPathParse {
-                message: e.to_string(),
-            }
-        })?;
+fn derive_auth_keypair(master_xpriv: ExtendedPrivKey) -> LipaResult<KeyPair> {
+    let lipa_purpose_path = DerivationPath::from_str(BACKEND_AUTH_DERIVATION_PATH)
+        .map_to_permanent_failure("Failed to build derivation path")?;
+
     let auth_xpriv = master_xpriv
         .derive_priv(SECP256K1, &lipa_purpose_path)
-        .map_err(|e| KeyDerivationError::Derivation {
-            message: e.to_string(),
-        })?;
+        .map_to_permanent_failure("Failed to derive keys")?;
 
     let auth_priv_key = auth_xpriv.private_key.secret_bytes().to_vec();
 
@@ -107,27 +92,18 @@ fn derive_auth_keypair(master_xpriv: ExtendedPrivKey) -> Result<KeyPair, KeyDeri
     })
 }
 
-fn get_master_xpriv(
-    network: Network,
-    mnemonic: Mnemonic,
-) -> Result<ExtendedPrivKey, KeyDerivationError> {
-    let master_extended_key: ExtendedKey =
-        mnemonic
-            .into_extended_key()
-            .map_err(|e| KeyDerivationError::ExtendedKeyFromMnemonic {
-                message: e.to_string(),
-            })?;
+fn get_master_xpriv(network: Network, mnemonic: Mnemonic) -> LipaResult<ExtendedPrivKey> {
+    let master_extended_key: ExtendedKey = mnemonic
+        .into_extended_key()
+        .map_to_permanent_failure("Failed to get extended key from mnemonic")?;
     let master_xpriv = match master_extended_key.into_xprv(network) {
-        None => return Err(KeyDerivationError::XPrivFromExtendedKey),
+        None => return Err(permanent_failure("Failed to get xpriv from extended key")),
         Some(xpriv) => xpriv,
     };
     Ok(master_xpriv)
 }
 
-fn build_spend_descriptor(
-    network: Network,
-    master_xpriv: ExtendedPrivKey,
-) -> Result<String, KeyDerivationError> {
+fn build_spend_descriptor(network: Network, master_xpriv: ExtendedPrivKey) -> LipaResult<String> {
     // Directly embed the master extended key in the descriptor
     let origin_path = "m";
 
@@ -143,10 +119,7 @@ fn build_spend_descriptor(
     )
 }
 
-fn build_watch_descriptor(
-    network: Network,
-    master_xpriv: ExtendedPrivKey,
-) -> Result<String, KeyDerivationError> {
+fn build_watch_descriptor(network: Network, master_xpriv: ExtendedPrivKey) -> LipaResult<String> {
     // Embed the account level extended key in the descriptor
     let origin_path = get_account_derivation_path(network);
 
@@ -176,25 +149,15 @@ fn build_descriptor(
     origin_derivation_path: &str,
     key_derivation_path: &str,
     kind: DescriptorKind,
-) -> Result<String, KeyDerivationError> {
-    let extended_key_derivation_path =
-        DerivationPath::from_str(origin_derivation_path).map_err(|e| {
-            KeyDerivationError::DerivationPathParse {
-                message: e.to_string(),
-            }
-        })?;
-    let descriptor_derivation_path =
-        DerivationPath::from_str(key_derivation_path).map_err(|e| {
-            KeyDerivationError::DerivationPathParse {
-                message: e.to_string(),
-            }
-        })?;
+) -> LipaResult<String> {
+    let extended_key_derivation_path = DerivationPath::from_str(origin_derivation_path)
+        .map_to_permanent_failure("Failed to build derivation path")?;
+    let descriptor_derivation_path = DerivationPath::from_str(key_derivation_path)
+        .map_to_permanent_failure("Failed to build derivation path")?;
 
     let derived_xpriv = master_xpriv
         .derive_priv(SECP256K1, &extended_key_derivation_path)
-        .map_err(|e| KeyDerivationError::Derivation {
-            message: e.to_string(),
-        })?;
+        .map_to_permanent_failure("Failed to derive keys")?;
 
     let origin: KeySource = (
         master_xpriv.fingerprint(SECP256K1),
@@ -203,25 +166,21 @@ fn build_descriptor(
 
     let derived_xpriv_desc_key: DescriptorKey<Segwitv0> = derived_xpriv
         .into_descriptor_key(Some(origin), descriptor_derivation_path)
-        .map_err(|e| KeyDerivationError::DescKeyFromXPriv {
-            message: e.to_string(),
-        })?;
+        .map_to_permanent_failure("Failed to get descriptor key from xpriv")?;
 
     if let Secret(desc_seckey, _, _) = derived_xpriv_desc_key {
         let desc_key = match kind {
             DescriptorKind::Public => {
-                let desc_pubkey = desc_seckey.to_public(SECP256K1).map_err(|e| {
-                    KeyDerivationError::DescPubKeyFromDescSecretKey {
-                        message: e.to_string(),
-                    }
-                })?;
+                let desc_pubkey = desc_seckey
+                    .to_public(SECP256K1)
+                    .map_to_permanent_failure("Failed to parse descriptor key")?;
                 desc_pubkey.to_string()
             }
             DescriptorKind::Private => desc_seckey.to_string(),
         };
         Ok(key_to_wpkh_descriptor(&desc_key))
     } else {
-        Err(KeyDerivationError::DescSecretKeyFromDescKey)
+        Err(permanent_failure("Failed to get descriptor from xpriv"))
     }
 }
 
