@@ -87,23 +87,33 @@ dictionary Balance {
     u64 immature;
 };
 
+enum AddressValidationResult {
+    "Valid",
+    "Invalid",
+};
+
 interface Wallet {
     [Throws=WalletError]
     constructor(Config config);
     [Throws=WalletError]
     Balance sync_balance();
 
-    [Throws=WalletError]
-    DrainTx prepare_drain_tx(string addr);
+    AddressValidationResult validate_addr(string addr);
 
     [Throws=WalletError]
-    void sign_and_broadcast_tx(DrainTx tx, string spend_descriptor);
+    Tx prepare_drain_tx(string addr);
+
+    [Throws=WalletError]
+    void sign_and_broadcast_tx(Tx tx, string spend_descriptor);
+
+    [Throws=GetStatusError]
+    TxStatus get_tx_status(string txid);
 };
 
-dictionary DrainTx {
+dictionary Tx {
     string id;
-    sequence<u8> serialized_tx;
-    u64 fee_sat;
+    sequence<u8> blob;
+    u64 on_chain_fee_sat;
     u64 output_sat;
 };
 
@@ -123,10 +133,4 @@ namespace lipabusinesslib {
     [Throws=SigningError]
     string sign(string message, string private_key);
     KeyPair generate_keypair();
-
-    [Throws=AddrError]
-    void validate_addr(string addr);
-
-    [Throws=GetStatusError]
-    TxStatus get_tx_status(string txid);
 };

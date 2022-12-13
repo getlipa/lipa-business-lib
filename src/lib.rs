@@ -12,7 +12,7 @@ use crate::secrets::{
     derive_keys, generate_keypair, generate_mnemonic, Descriptors, KeyPair, WalletKeys,
 };
 use crate::signing::sign;
-pub use crate::wallet::{get_tx_status, validate_addr, Config, DrainTx, TxStatus, Wallet};
+pub use crate::wallet::{AddressValidationResult, Config, Tx, TxStatus, Wallet};
 
 use bdk::bitcoin::Network;
 use bdk::Balance;
