@@ -1,80 +1,198 @@
-#[derive(Debug, thiserror::Error)]
-pub enum KeyGenerationError {
-    #[error("Failed to generate entropy: {message}")]
-    EntropyGeneration { message: String },
+//! LipaError enum with helper functions.
+//!
+//! # Examples
+//!
+//! ```ignore
+//! fn foo(x: u32) -> LipaResult<String> {
+//!     if x <= 10 {
+//!         return Err(invalid_input("x must be greater than 10"));
+//!     }
+//!     foreign_function().map_to_runtime_error("Foreign code failed")?;
+//!     internal_function().prefix_error("Internal function failed")?;
+//!     another_internal_function().lift_invalid_input("Another failure")?;
+//! }
+//! ```
 
-    #[error("Failed to generate mnemonic from entropy: {message}")]
-    MnemonicFromEntropy { message: String },
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum LipaError {
+    /// Invalid input.
+    /// Consider fixing the input and retrying the request.
+    #[error("InvalidInput: {message}")]
+    InvalidInput { message: String },
+
+    /// Recoverable problem (e.g. network issue, problem with en external service).
+    /// Consider retrying the request.
+    #[error("RuntimeError: {message}")]
+    RuntimeError { message: String },
+
+    /// Unrecoverable problem (e.g. internal invariant broken).
+    /// Consider suggesting the user to report the issue to the developers.
+    #[error("PermanentFailure: {message}")]
+    PermanentFailure { message: String },
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum KeyDerivationError {
-    #[error("Failed to derive the provided path: {message}")]
-    Derivation { message: String },
-
-    #[error("Failed to parse derivation path: {message}")]
-    DerivationPathParse { message: String },
-
-    #[error("Failed to get a DescriptorKey from a ExtendedPrivKey: {message}")]
-    DescKeyFromXPriv { message: String },
-
-    #[error("Failed to get a DescriptorPublicKey from a DescriptorSecretKey: {message}")]
-    DescPubKeyFromDescSecretKey { message: String },
-
-    #[error("Failed to get a DescriptorSecretKey from a DescriptorKey")]
-    DescSecretKeyFromDescKey,
-
-    #[error("Failed to turn Mnemonic into ExtendedKey: {message}")]
-    ExtendedKeyFromMnemonic { message: String },
-
-    #[error("Failed to turn ExtendedPrivKey into ExtendedKey: {message}")]
-    ExtendedKeyFromXPriv { message: String },
-
-    #[error("Failed to parse provided mnemonic: {message}")]
-    MnemonicParsing { message: String },
-
-    #[error("Failed to turn ExtendedKey into ExtendedPrivKey")]
-    XPrivFromExtendedKey,
+#[allow(dead_code)]
+pub fn invalid_input<E: ToString>(e: E) -> LipaError {
+    LipaError::InvalidInput {
+        message: e.to_string(),
+    }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum WalletError {
-    #[error("Failed to create a bdk::Wallet instance: {message}")]
-    BdkWallet { message: String },
-
-    #[error("Failed to create a client to get blockchain data: {message}")]
-    ChainBackendClient { message: String },
-
-    #[error("Failed to sync with the blockchain: {message}")]
-    ChainSync { message: String },
-
-    #[error("Failed to get balance from bdk::Wallet instance: {message}")]
-    GetBalance { message: String },
-
-    #[error("Failed to open database for bdk::Wallet: {message}")]
-    OpenDatabase { message: String },
-
-    #[error("Failed to open database tree for bdk::Wallet: {message}")]
-    OpenDatabaseTree { message: String },
+#[allow(dead_code)]
+pub fn runtime_error<E: ToString>(e: E) -> LipaError {
+    LipaError::RuntimeError {
+        message: e.to_string(),
+    }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum SigningError {
-    #[error("Failed to hash the message: {message}")]
-    MessageHashing { message: String },
-
-    #[error("Failed to parse the secret key: {message}")]
-    SecretKeyParse { message: String },
+pub fn permanent_failure<E: ToString>(e: E) -> LipaError {
+    LipaError::PermanentFailure {
+        message: e.to_string(),
+    }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum AddrError {
-    #[error("The provided address is invalid: {message}")]
-    InvalidAddr { message: String },
+pub type LipaResult<T> = Result<T, LipaError>;
+
+pub trait LipaResultTrait<T> {
+    /// Lift `InvalidInput` error into `PermanentFailure`.
+    ///
+    /// Use the method when you want to propagate an error from an internal
+    /// function to the caller.
+    /// Reasoning is that if you got `InvalidInput` it means you failed to
+    /// validate the input for the internal function yourself, so for you it
+    /// becomes `PermanentFailure`.
+    fn lift_invalid_input(self) -> LipaResult<T>;
+
+    fn prefix_error<M: ToString + 'static>(self, message: M) -> LipaResult<T>;
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum GetStatusError {
-    #[error("Couldn't get the tx status: {message}")]
-    GetStatusFailure { message: String },
+impl<T> LipaResultTrait<T> for LipaResult<T> {
+    fn lift_invalid_input(self) -> LipaResult<T> {
+        self.map_err(|e| match e {
+            LipaError::InvalidInput { message } => LipaError::PermanentFailure {
+                message: format!("InvalidInput: {}", message),
+            },
+            another_error => another_error,
+        })
+    }
+
+    fn prefix_error<M: ToString + 'static>(self, prefix: M) -> LipaResult<T> {
+        self.map_err(|e| match e {
+            LipaError::InvalidInput { message } => LipaError::InvalidInput {
+                message: format!("{}: {}", prefix.to_string(), message),
+            },
+            LipaError::RuntimeError { message } => LipaError::RuntimeError {
+                message: format!("{}: {}", prefix.to_string(), message),
+            },
+            LipaError::PermanentFailure { message } => LipaError::PermanentFailure {
+                message: format!("{}: {}", prefix.to_string(), message),
+            },
+        })
+    }
+}
+
+pub trait MapToLipaError<T, E: ToString> {
+    fn map_to_invalid_input<M: ToString>(self, message: M) -> LipaResult<T>;
+    fn map_to_runtime_error<M: ToString>(self, message: M) -> LipaResult<T>;
+    fn map_to_permanent_failure<M: ToString>(self, message: M) -> LipaResult<T>;
+}
+
+impl<T, E: ToString> MapToLipaError<T, E> for Result<T, E> {
+    fn map_to_invalid_input<M: ToString>(self, message: M) -> LipaResult<T> {
+        self.map_err(move |e| LipaError::InvalidInput {
+            message: format!("{}: {}", message.to_string(), e.to_string()),
+        })
+    }
+
+    fn map_to_runtime_error<M: ToString>(self, message: M) -> LipaResult<T> {
+        self.map_err(move |e| LipaError::RuntimeError {
+            message: format!("{}: {}", message.to_string(), e.to_string()),
+        })
+    }
+
+    fn map_to_permanent_failure<M: ToString>(self, message: M) -> LipaResult<T> {
+        self.map_err(move |e| LipaError::PermanentFailure {
+            message: format!("{}: {}", message.to_string(), e.to_string()),
+        })
+    }
+}
+
+pub trait MapToLipaErrorForUnitType<T> {
+    fn map_to_invalid_input<M: ToString>(self, message: M) -> LipaResult<T>;
+    fn map_to_runtime_error<M: ToString>(self, message: M) -> LipaResult<T>;
+    fn map_to_permanent_failure<M: ToString>(self, message: M) -> LipaResult<T>;
+}
+
+impl<T> MapToLipaErrorForUnitType<T> for Result<T, ()> {
+    fn map_to_invalid_input<M: ToString>(self, message: M) -> LipaResult<T> {
+        self.map_err(move |()| LipaError::InvalidInput {
+            message: message.to_string(),
+        })
+    }
+
+    fn map_to_runtime_error<M: ToString>(self, message: M) -> LipaResult<T> {
+        self.map_err(move |()| LipaError::RuntimeError {
+            message: message.to_string(),
+        })
+    }
+
+    fn map_to_permanent_failure<M: ToString>(self, message: M) -> LipaResult<T> {
+        self.map_err(move |()| LipaError::PermanentFailure {
+            message: message.to_string(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_map_to_lipa_errors() {
+        use std::io::{Error, ErrorKind, Result};
+
+        let io_error: Result<()> = Err(Error::new(ErrorKind::Other, "File not found"));
+        let lipa_error = io_error.map_to_runtime_error("No backup").unwrap_err();
+        assert_eq!(
+            lipa_error.to_string(),
+            "RuntimeError: No backup: File not found"
+        );
+
+        let error: std::result::Result<(), ()> = Err(());
+        let lipa_error = error.map_to_runtime_error("No backup").unwrap_err();
+        assert_eq!(lipa_error.to_string(), "RuntimeError: No backup");
+    }
+
+    #[test]
+    fn test_lift_invalid_input() {
+        let result: LipaResult<()> =
+            Err(invalid_input("Number must be positive")).lift_invalid_input();
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "PermanentFailure: InvalidInput: Number must be positive"
+        );
+
+        let result: LipaResult<()> = Err(runtime_error("Socket timeout")).lift_invalid_input();
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "RuntimeError: Socket timeout"
+        );
+
+        let result: LipaResult<()> =
+            Err(permanent_failure("Devision by zero")).lift_invalid_input();
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "PermanentFailure: Devision by zero"
+        );
+    }
+
+    #[test]
+    fn test_prefix_error() {
+        let result: LipaResult<()> =
+            Err(invalid_input("Number must be positive")).prefix_error("Invalid amount");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "InvalidInput: Invalid amount: Number must be positive"
+        );
+    }
 }

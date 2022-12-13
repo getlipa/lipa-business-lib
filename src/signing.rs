@@ -1,20 +1,15 @@
-use crate::errors::SigningError;
+use crate::errors::{LipaResult, MapToLipaError};
 use bdk::bitcoin::secp256k1::SecretKey;
 use secp256k1::hashes::hex::FromHex;
 use secp256k1::hashes::sha256;
 use secp256k1::{Message, SECP256K1};
 
-pub fn sign(message: String, private_key: String) -> Result<String, SigningError> {
+pub fn sign(message: String, private_key: String) -> LipaResult<String> {
     let message = Message::from_hashed_data::<sha256::Hash>(message.as_bytes());
     let secret_key_bytes =
-        Vec::from_hex(&private_key).map_err(|e| SigningError::SecretKeyParse {
-            message: e.to_string(),
-        })?;
-    let secret_key = SecretKey::from_slice(secret_key_bytes.as_slice()).map_err(|e| {
-        SigningError::SecretKeyParse {
-            message: e.to_string(),
-        }
-    })?;
+        Vec::from_hex(&private_key).map_to_invalid_input("Invalid private key string")?;
+    let secret_key = SecretKey::from_slice(secret_key_bytes.as_slice())
+        .map_to_invalid_input("Invalid private key string")?;
 
     let sig = SECP256K1.sign_ecdsa(&message, &secret_key);
 
