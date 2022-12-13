@@ -48,6 +48,16 @@ enum SigningError {
     "SecretKeyParse",
 };
 
+[Error]
+enum AddrError {
+    "InvalidAddr",
+};
+
+[Error]
+enum GetStatusError {
+    "GetStatusFailure",
+};
+
 dictionary KeyPair {
     string secret_key;
     string public_key;
@@ -77,11 +87,41 @@ dictionary Balance {
     u64 immature;
 };
 
+enum AddressValidationResult {
+    "Valid",
+    "Invalid",
+};
+
 interface Wallet {
     [Throws=WalletError]
     constructor(Config config);
     [Throws=WalletError]
     Balance sync_balance();
+
+    AddressValidationResult validate_addr(string addr);
+
+    [Throws=WalletError]
+    Tx prepare_drain_tx(string addr);
+
+    [Throws=WalletError]
+    void sign_and_broadcast_tx(Tx tx, string spend_descriptor);
+
+    [Throws=GetStatusError]
+    TxStatus get_tx_status(string txid);
+};
+
+dictionary Tx {
+    string id;
+    sequence<u8> blob;
+    u64 on_chain_fee_sat;
+    u64 output_sat;
+};
+
+[Enum]
+interface TxStatus {
+    NotInMempool();
+    InMempool();
+    Confirmed(u32 number_of_blocks);
 };
 
 namespace lipabusinesslib {

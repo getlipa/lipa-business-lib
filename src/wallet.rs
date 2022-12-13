@@ -1,4 +1,5 @@
 use crate::errors::WalletError;
+use crate::GetStatusError;
 use bdk::bitcoin::Network;
 use bdk::blockchain::ElectrumBlockchain;
 use bdk::electrum_client::Client;
@@ -17,6 +18,24 @@ pub struct Config {
 pub struct Wallet {
     blockchain: ElectrumBlockchain,
     wallet: Arc<Mutex<bdk::Wallet<Tree>>>,
+}
+
+pub struct Tx {
+    pub id: String,
+    pub blob: Vec<u8>,
+    pub on_chain_fee_sat: u64,
+    pub output_sat: u64,
+}
+
+pub enum TxStatus {
+    NotInMempool,
+    InMempool,
+    Confirmed { number_of_blocks: u32 },
+}
+
+pub enum AddressValidationResult {
+    Valid,
+    Invalid,
 }
 
 impl Wallet {
@@ -60,6 +79,26 @@ impl Wallet {
         })?;
 
         Ok(balance)
+    }
+
+    pub fn validate_addr(&self, _addr: String) -> AddressValidationResult {
+        todo!()
+    }
+
+    pub fn prepare_drain_tx(&self, _addr: String) -> Result<Tx, WalletError> {
+        todo!()
+    }
+
+    pub fn sign_and_broadcast_tx(
+        &self,
+        _tx: Tx,
+        _spend_descriptor: String,
+    ) -> Result<(), WalletError> {
+        todo!()
+    }
+
+    pub fn get_tx_status(&self, _txid: String) -> Result<TxStatus, GetStatusError> {
+        todo!()
     }
 
     // Not needed for now
