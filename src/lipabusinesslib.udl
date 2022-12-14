@@ -1,3 +1,10 @@
+// The Lipa Business Library (LBL)
+//
+// The main goal of this library is to implement all cryptographic and
+// Bitcoin network functionality of the Lipa Wallet for business.
+
+// Use "Bitcoin" for production code (= runs on the Bitcoin mainnet)
+// Testnet and Signet are test *networks*, while Regtest enables an entirely local test environment
 enum Network {
     "Bitcoin",
     "Testnet",
@@ -13,34 +20,59 @@ enum LogLevel {
     "Trace",
 };
 
+// A code that specifies the RuntimError that ocurred
 enum RuntimeErrorCode {
-    "RemoteServiceUnavailable",
-    "ElectrumServiceUnavailable",
-    "GenericError",
+    "RemoteServiceUnavailable", // A remote service is unavailable. Could there be a loss of internet connection?
+    "ElectrumServiceUnavailable", // The electrum service is unavailable. Could there be a loss of internet connection?
+    "GenericError", // A generic error for unexpected/unknown runtime errors
 };
 
+//
 [Error]
 interface LipaError {
+    // Invalid input.
+    // Consider fixing the input and retrying the request.
     InvalidInput(string message);
+
+    // Recoverable problem (e.g. network issue, problem with en external service).
+    // Consider retrying the request.
     RuntimeError(RuntimeErrorCode code, string message);
+
+    // Unrecoverable problem (e.g. internal invariant broken).
+    // Consider suggesting the user to report the issue to the developers.
     PermanentFailure(string message);
 };
 
+// A key pair with both keys encoded in a hex string.
 dictionary KeyPair {
     string secret_key;
     string public_key;
 };
 
+// A pair of descriptors. The watch_descriptor doesn't include private keys and is appropriate to instantiate
+// a Wallet object. To be able to spend, the spend_descriptor will be required. The spend_descriptor includes
+// private keys and as such should be obtained from secure storage only when strictly necessary.
 dictionary Descriptors {
     string spend_descriptor;
     string watch_descriptor;
 };
 
+// A structure that holds all useful keys that can be derived from the mnemonic using derive_keys()
 dictionary WalletKeys {
-    KeyPair wallet_keypair;
-    Descriptors wallet_descriptors;
+    KeyPair wallet_keypair; // Used for authentication with the Lipa backend
+    Descriptors wallet_descriptors; // Used for instantiating a local on-chain wallet
 };
 
+// An object that holds all configuration needed to instantiate a Wallet object
+//
+// Fields:
+// * electrum_url - url of the electrum backend used to access the Bitcoin blockchain
+//     Suggested values:
+//     - "ssl://electrum.blockstream.info:50002" for Mainnet (PROD)
+//     - "ssl://electrum.blockstream.info:60002" for Testnet
+// * wallet_db_path - a path on the mobile device's filesystem where the wallet db will be created
+// * network - the Bitcoin Network the node should run on (see enum above)
+// * watch_descriptor - the watch descriptor that can be obtained from WalletKeys
 dictionary Config {
     string electrum_url;
     string wallet_db_path;
@@ -48,6 +80,13 @@ dictionary Config {
     string watch_descriptor;
 };
 
+// Detailed balance information that can be obtained using Wallet.sync_balance();
+//
+// Fields:
+// * confirmed - confirmed balance
+// * trusted_pending - pending balance that only we can double-spend
+// * untrusted_pending - pending balance that could be double-spent
+// * immature - only applicable to miners and should be ignored
 dictionary Balance {
     u64 confirmed;
     u64 trusted_pending;
@@ -55,29 +94,47 @@ dictionary Balance {
     u64 immature;
 };
 
+// Result from Wallet.validate_addr(string addr);
+//
+// A valid address is an address that has been verified to be usable by Wallet.prepare_drain_tx(string addr) method,
+// meaning that it's a valid bitcoin address and it's from the same network as the network provided to Wallet
 enum AddressValidationResult {
     "Valid",
     "Invalid",
 };
 
 interface Wallet {
+    // Create a new Wallet instance.
     [Throws=LipaError]
     constructor(Config config);
+
+    // Syncs with the bitcoin network and returns the balance of the wallet.
     [Throws=LipaError]
     Balance sync_balance();
 
+    // Validates that an address is valid and we can send funds to it.
     AddressValidationResult validate_addr(string addr);
 
+    // Constructs a tx that completely drains the wallet. The tx is not actually broadcast here.
     [Throws=LipaError]
     Tx prepare_drain_tx(string addr);
 
+    // Signs and broadcasts a provided tx. Requires a spend descriptor that is used to sign the transaction.
     [Throws=LipaError]
     void sign_and_broadcast_tx(Tx tx, string spend_descriptor);
 
+    // Returns the status of a tx given its tx id.
     [Throws=LipaError]
     TxStatus get_tx_status(string txid);
 };
 
+// A Bitcoin tx
+//
+// Fields:
+// * id - confirmed balance
+// * blob - the serialized tx
+// * on_chain_fee_sat - on-chain fees included in the tx (denominated in sats)
+// * output_sat - amount of bitcoin to be transferred (denominated in sats)
 dictionary Tx {
     string id;
     sequence<u8> blob;
@@ -85,6 +142,14 @@ dictionary Tx {
     u64 output_sat;
 };
 
+// Status of a tx
+//
+// Variants:
+// * NotInMempool - the tx is not confirmed neither in the mempool. Probably the on-chain fee was set too low
+//      and the tx got evicted from the mempool. This situation is unlikely given that we'll avoid using low fees.
+// * InMempool - the tx has 0 confirmations
+// * Confirmed - the tx has at least 1 confirmation. The exact number of confirmations is provided (number_of_blocks)
+//      and it's commonly accepted that 6 confirmations isn't reversible
 [Enum]
 interface TxStatus {
     NotInMempool();
@@ -93,12 +158,21 @@ interface TxStatus {
 };
 
 namespace lipabusinesslib {
+    // Initiate the logger and set the log level.
     void init_native_logger_once(LogLevel min_level);
+
+    // Generate a new mnemonic.
     [Throws=LipaError]
     sequence<string> generate_mnemonic();
+
+    // Derives WalletKeys from a mnemonic.
     [Throws=LipaError]
     WalletKeys derive_keys(Network network, sequence<string> mnemonic_string);
+
+    // Signs a message with the provided private_key. Used for authenticating with the backend.
     [Throws=LipaError]
     string sign(string message, string private_key);
+
+    // Generate a new keypair. Used for authentication with the backend.
     KeyPair generate_keypair();
 };
