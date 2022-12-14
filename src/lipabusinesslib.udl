@@ -13,11 +13,17 @@ enum LogLevel {
     "Trace",
 };
 
+enum RuntimeErrorCode {
+    "RemoteServiceUnavailable",
+    "ElectrumServiceUnavailable",
+    "GenericError",
+};
+
 [Error]
-enum LipaError {
-    "InvalidInput",
-    "RuntimeError",
-    "PermanentFailure",
+interface LipaError {
+    InvalidInput(string message);
+    RuntimeError(RuntimeErrorCode code, string message);
+    PermanentFailure(string message);
 };
 
 dictionary KeyPair {

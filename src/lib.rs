@@ -4,7 +4,7 @@ mod secrets;
 mod signing;
 mod wallet;
 
-use crate::errors::LipaError;
+use crate::errors::{LipaError, RuntimeErrorCode};
 use crate::native_logger::init_native_logger_once;
 use crate::secrets::{
     derive_keys, generate_keypair, generate_mnemonic, Descriptors, KeyPair, WalletKeys,
