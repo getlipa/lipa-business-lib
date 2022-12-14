@@ -13,6 +13,20 @@
 //! }
 //! ```
 
+use std::fmt::{Display, Formatter};
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum RuntimeErrorCode {
+    RemoteServiceUnavailable,
+    GenericError,
+}
+
+impl Display for RuntimeErrorCode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum LipaError {
     /// Invalid input.
@@ -22,8 +36,11 @@ pub enum LipaError {
 
     /// Recoverable problem (e.g. network issue, problem with en external service).
     /// Consider retrying the request.
-    #[error("RuntimeError: {message}")]
-    RuntimeError { message: String },
+    #[error("RuntimeError: {code} - {message}")]
+    RuntimeError {
+        code: RuntimeErrorCode,
+        message: String,
+    },
 
     /// Unrecoverable problem (e.g. internal invariant broken).
     /// Consider suggesting the user to report the issue to the developers.
@@ -39,8 +56,9 @@ pub fn invalid_input<E: ToString>(e: E) -> LipaError {
 }
 
 #[allow(dead_code)]
-pub fn runtime_error<E: ToString>(e: E) -> LipaError {
+pub fn runtime_error<E: ToString>(code: RuntimeErrorCode, e: E) -> LipaError {
     LipaError::RuntimeError {
+        code,
         message: e.to_string(),
     }
 }
@@ -81,7 +99,8 @@ impl<T> LipaResultTrait<T> for LipaResult<T> {
             LipaError::InvalidInput { message } => LipaError::InvalidInput {
                 message: format!("{}: {}", prefix.to_string(), message),
             },
-            LipaError::RuntimeError { message } => LipaError::RuntimeError {
+            LipaError::RuntimeError { code, message } => LipaError::RuntimeError {
+                code,
                 message: format!("{}: {}", prefix.to_string(), message),
             },
             LipaError::PermanentFailure { message } => LipaError::PermanentFailure {
@@ -93,7 +112,8 @@ impl<T> LipaResultTrait<T> for LipaResult<T> {
 
 pub trait MapToLipaError<T, E: ToString> {
     fn map_to_invalid_input<M: ToString>(self, message: M) -> LipaResult<T>;
-    fn map_to_runtime_error<M: ToString>(self, message: M) -> LipaResult<T>;
+    fn map_to_runtime_error<M: ToString>(self, code: RuntimeErrorCode, message: M)
+        -> LipaResult<T>;
     fn map_to_permanent_failure<M: ToString>(self, message: M) -> LipaResult<T>;
 }
 
@@ -104,8 +124,13 @@ impl<T, E: ToString> MapToLipaError<T, E> for Result<T, E> {
         })
     }
 
-    fn map_to_runtime_error<M: ToString>(self, message: M) -> LipaResult<T> {
+    fn map_to_runtime_error<M: ToString>(
+        self,
+        code: RuntimeErrorCode,
+        message: M,
+    ) -> LipaResult<T> {
         self.map_err(move |e| LipaError::RuntimeError {
+            code,
             message: format!("{}: {}", message.to_string(), e.to_string()),
         })
     }
@@ -119,7 +144,8 @@ impl<T, E: ToString> MapToLipaError<T, E> for Result<T, E> {
 
 pub trait MapToLipaErrorForUnitType<T> {
     fn map_to_invalid_input<M: ToString>(self, message: M) -> LipaResult<T>;
-    fn map_to_runtime_error<M: ToString>(self, message: M) -> LipaResult<T>;
+    fn map_to_runtime_error<M: ToString>(self, code: RuntimeErrorCode, message: M)
+        -> LipaResult<T>;
     fn map_to_permanent_failure<M: ToString>(self, message: M) -> LipaResult<T>;
 }
 
@@ -130,8 +156,13 @@ impl<T> MapToLipaErrorForUnitType<T> for Result<T, ()> {
         })
     }
 
-    fn map_to_runtime_error<M: ToString>(self, message: M) -> LipaResult<T> {
+    fn map_to_runtime_error<M: ToString>(
+        self,
+        code: RuntimeErrorCode,
+        message: M,
+    ) -> LipaResult<T> {
         self.map_err(move |()| LipaError::RuntimeError {
+            code,
             message: message.to_string(),
         })
     }
@@ -146,21 +177,29 @@ impl<T> MapToLipaErrorForUnitType<T> for Result<T, ()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RuntimeErrorCode::RemoteServiceUnavailable;
 
     #[test]
     fn test_map_to_lipa_errors() {
         use std::io::{Error, ErrorKind, Result};
 
         let io_error: Result<()> = Err(Error::new(ErrorKind::Other, "File not found"));
-        let lipa_error = io_error.map_to_runtime_error("No backup").unwrap_err();
+        let lipa_error = io_error
+            .map_to_runtime_error(RemoteServiceUnavailable, "No backup")
+            .unwrap_err();
         assert_eq!(
             lipa_error.to_string(),
-            "RuntimeError: No backup: File not found"
+            "RuntimeError: RemoteServiceUnavailable - No backup: File not found"
         );
 
         let error: std::result::Result<(), ()> = Err(());
-        let lipa_error = error.map_to_runtime_error("No backup").unwrap_err();
-        assert_eq!(lipa_error.to_string(), "RuntimeError: No backup");
+        let lipa_error = error
+            .map_to_runtime_error(RemoteServiceUnavailable, "No backup")
+            .unwrap_err();
+        assert_eq!(
+            lipa_error.to_string(),
+            "RuntimeError: RemoteServiceUnavailable - No backup"
+        );
     }
 
     #[test]
@@ -172,10 +211,11 @@ mod tests {
             "PermanentFailure: InvalidInput: Number must be positive"
         );
 
-        let result: LipaResult<()> = Err(runtime_error("Socket timeout")).lift_invalid_input();
+        let result: LipaResult<()> =
+            Err(runtime_error(RemoteServiceUnavailable, "Socket timeout")).lift_invalid_input();
         assert_eq!(
             result.unwrap_err().to_string(),
-            "RuntimeError: Socket timeout"
+            "RuntimeError: RemoteServiceUnavailable - Socket timeout"
         );
 
         let result: LipaResult<()> =

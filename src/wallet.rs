@@ -1,4 +1,5 @@
 use crate::errors::{LipaResult, MapToLipaError};
+use crate::RuntimeErrorCode::RemoteServiceUnavailable;
 use bdk::bitcoin::Network;
 use bdk::blockchain::ElectrumBlockchain;
 use bdk::electrum_client::Client;
@@ -39,8 +40,10 @@ pub enum AddressValidationResult {
 
 impl Wallet {
     pub fn new(config: Config) -> LipaResult<Self> {
-        let client = Client::new(&config.electrum_url)
-            .map_to_runtime_error("Failed to create an electrum client")?;
+        let client = Client::new(&config.electrum_url).map_to_runtime_error(
+            RemoteServiceUnavailable,
+            "Failed to create an electrum client",
+        )?;
         let blockchain = ElectrumBlockchain::from(client);
 
         let db_path = Path::new(&config.wallet_db_path);
@@ -61,11 +64,11 @@ impl Wallet {
 
         wallet
             .sync(&self.blockchain, SyncOptions::default())
-            .map_to_runtime_error("Failed to sync bdk wallet")?;
+            .map_to_runtime_error(RemoteServiceUnavailable, "Failed to sync bdk wallet")?;
 
         let balance = wallet
             .get_balance()
-            .map_to_runtime_error("Failed to get balance from bdk wallet")?;
+            .map_to_permanent_failure("Failed to get balance from bdk wallet")?;
 
         Ok(balance)
     }
