@@ -15,6 +15,7 @@ enum LogLevel {
 
 enum RuntimeErrorCode {
     "RemoteServiceUnavailable",
+    "ElectrumServiceUnavailable",
     "GenericError",
 };
 

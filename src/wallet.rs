@@ -1,5 +1,5 @@
-use crate::errors::{LipaResult, MapToLipaError};
-use crate::RuntimeErrorCode::RemoteServiceUnavailable;
+use crate::errors::{permanent_failure, runtime_error, LipaResult, MapToLipaError};
+use crate::RuntimeErrorCode::{ElectrumServiceUnavailable, GenericError, RemoteServiceUnavailable};
 use bdk::bitcoin::Network;
 use bdk::blockchain::ElectrumBlockchain;
 use bdk::electrum_client::Client;
@@ -62,9 +62,16 @@ impl Wallet {
     pub fn sync_balance(&self) -> LipaResult<Balance> {
         let wallet = self.wallet.lock().unwrap();
 
-        wallet
-            .sync(&self.blockchain, SyncOptions::default())
-            .map_to_runtime_error(RemoteServiceUnavailable, "Failed to sync bdk wallet")?;
+        match wallet.sync(&self.blockchain, SyncOptions::default()) {
+            Ok(_) => {}
+            Err(e) => {
+                return match e {
+                    bdk::Error::Electrum(e) => Err(runtime_error(ElectrumServiceUnavailable, e)),
+                    bdk::Error::Sled(e) => Err(permanent_failure(e)),
+                    _ => Err(runtime_error(GenericError, "Failed to sync the BDK wallet")),
+                }
+            }
+        };
 
         let balance = wallet
             .get_balance()
