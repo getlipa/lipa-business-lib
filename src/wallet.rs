@@ -177,7 +177,7 @@ impl Wallet {
         blockchain: &ElectrumBlockchain,
     ) -> LipaResult<()> {
         match wallet.sync(blockchain, SyncOptions::default()) {
-            Ok(_) => {}
+            Ok(()) => {}
             Err(e) => {
                 return match e {
                     bdk::Error::Electrum(e) => Err(runtime_error(ElectrumServiceUnavailable, e)),
