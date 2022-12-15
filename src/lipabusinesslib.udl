@@ -133,7 +133,7 @@ interface Wallet {
 //
 // Fields:
 // * id - confirmed balance
-// * blob - the serialized tx
+// * blob - the serialized tx (PSBT)
 // * on_chain_fee_sat - on-chain fees included in the tx (denominated in sats)
 // * output_sat - amount of bitcoin to be transferred (denominated in sats)
 dictionary Tx {
