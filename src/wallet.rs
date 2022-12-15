@@ -88,7 +88,11 @@ impl Wallet {
         todo!()
     }
 
-    pub fn sign_and_broadcast_tx(&self, _tx: Tx, _spend_descriptor: String) -> LipaResult<()> {
+    pub fn sign_and_broadcast_tx(
+        &self,
+        _tx_blob: Vec<u8>,
+        _spend_descriptor: String,
+    ) -> LipaResult<()> {
         todo!()
     }
 
