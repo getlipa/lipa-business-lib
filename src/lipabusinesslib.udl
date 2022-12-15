@@ -43,7 +43,7 @@ interface LipaError {
     PermanentFailure(string message);
 };
 
-// A key pair with both keys encoded in a hex string.
+// A key pair with both keys encoded as a hex string.
 dictionary KeyPair {
     string secret_key;
     string public_key;
