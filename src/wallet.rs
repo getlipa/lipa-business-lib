@@ -1,4 +1,4 @@
-use crate::errors::{permanent_failure, runtime_error, LipaResult, MapToLipaError};
+use crate::errors::{invalid_input, permanent_failure, runtime_error, LipaResult, MapToLipaError};
 use crate::RuntimeErrorCode::{
     ElectrumServiceUnavailable, GenericError, NotEnoughFunds, RemoteServiceUnavailable,
 };
@@ -90,8 +90,13 @@ impl Wallet {
     }
 
     pub fn prepare_drain_tx(&self, addr: String, confirm_in_blocks: u32) -> LipaResult<Tx> {
-        let address = Address::from_str(&addr)
-            .map_to_invalid_input("Invalid bitcoin address")?;
+        let address = Address::from_str(&addr).map_to_invalid_input("Invalid bitcoin address")?;
+
+        if !(1..=25).contains(&confirm_in_blocks) {
+            return Err(invalid_input(
+                "Invalid block confirmation target. Please use a target in the range [1; 25]",
+            ));
+        }
 
         let wallet = self.wallet.lock().unwrap();
 
