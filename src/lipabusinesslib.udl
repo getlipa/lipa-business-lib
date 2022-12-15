@@ -115,7 +115,8 @@ interface Wallet {
     // Validates that an address is valid and we can send funds to it.
     AddressValidationResult validate_addr(string addr);
 
-    // Constructs a tx that completely drains the wallet. The tx is not actually broadcast here.
+    // Constructs a tx that completely drains (sends all funds available) the wallet.
+    // The tx is not actually broadcast here.
     [Throws=LipaError]
     Tx prepare_drain_tx(string addr);
 
