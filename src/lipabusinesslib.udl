@@ -97,7 +97,7 @@ dictionary Balance {
 // Result from Wallet.validate_addr(string addr);
 //
 // A valid address is an address that has been verified to be usable by Wallet.prepare_drain_tx(string addr) method,
-// meaning that it's a valid bitcoin address and it's from the same network as the network provided to Wallet
+// meaning that it's a valid bitcoin address for the correct network ( MAINNET | TESTNET | ... )
 enum AddressValidationResult {
     "Valid",
     "Invalid",
