@@ -122,7 +122,11 @@ impl Wallet {
             .finish()
             .map_to_runtime_error(NotEnoughFunds, "Failed to create PSBT")?;
 
-        let fee = tx_details.fee.unwrap(); // According to the docs, it's never None when using an Electrum backend
+        let fee = match tx_details.fee {
+            None => return Err(permanent_failure("Empty fee using an Electrum backend")),
+            Some(f) => f,
+        };
+
         let tx = Tx {
             id: tx_details.txid.to_string(),
             blob: serialize(&psbt),
