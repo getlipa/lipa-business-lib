@@ -27,7 +27,6 @@ enum RuntimeErrorCode {
     "GenericError", // A generic error for unexpected/unknown runtime errors
 };
 
-//
 [Error]
 interface LipaError {
     // Invalid input.
