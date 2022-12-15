@@ -136,6 +136,9 @@ interface Wallet {
 // * blob - the serialized tx (PSBT)
 // * on_chain_fee_sat - on-chain fees included in the tx (denominated in sats)
 // * output_sat - amount of bitcoin to be transferred (denominated in sats)
+//
+// the new local balance after this tx will be:
+// new_balance = old_balance - (output_sat + on_chain_fee_sat)
 dictionary Tx {
     string id;
     sequence<u8> blob;
