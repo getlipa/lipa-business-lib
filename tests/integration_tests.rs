@@ -1,5 +1,5 @@
 use bdk::bitcoin::consensus::deserialize;
-use bdk::bitcoin::psbt::PartiallySignedTransaction;
+use bdk::bitcoin::psbt::Psbt;
 use bdk::bitcoin::{Address, Network, Txid};
 use std::str::FromStr;
 use uniffi_lipabusinesslib::{Config, Wallet};
@@ -39,7 +39,7 @@ fn test_drain_wallet() {
 
     assert_eq!(drain_tx.output_sat + drain_tx.on_chain_fee_sat, 88009);
 
-    let psbt = deserialize::<PartiallySignedTransaction>(&drain_tx.blob).unwrap();
+    let psbt = deserialize::<Psbt>(&drain_tx.blob).unwrap();
 
     assert_eq!(
         psbt.unsigned_tx.txid(),
