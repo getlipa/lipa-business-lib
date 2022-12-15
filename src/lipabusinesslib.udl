@@ -85,7 +85,8 @@ dictionary Config {
 // * confirmed - confirmed balance
 // * trusted_pending - pending balance that only the local wallet can double-spend
 // * untrusted_pending - pending balance that could be double-spent by others
-// * immature - only applicable to miners and should be ignored
+// * immature - immature coinbase outputs. Can be ignored as it's not expected that miners
+//      will be mining towards this wallet
 dictionary Balance {
     u64 confirmed;
     u64 trusted_pending;
