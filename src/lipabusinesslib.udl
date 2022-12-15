@@ -107,7 +107,7 @@ interface Wallet {
     [Throws=LipaError]
     constructor(Config config);
 
-    // Syncs with the bitcoin network and returns the balance of the wallet.
+    // Syncs with Electrum to get the current balance of the wallet.
     [Throws=LipaError]
     Balance sync_balance();
 
