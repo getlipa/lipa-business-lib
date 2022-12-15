@@ -149,7 +149,7 @@ dictionary Tx {
 // Status of a tx
 //
 // Variants:
-// * NotInMempool - the tx is not confirmed neither in the mempool. Probably the on-chain fee was set too low
+// * NotInMempool - the tx is neither confirmed nor in the mempool. Probably the on-chain fee was set too low
 //      and the tx got evicted from the mempool. This situation is unlikely given that we'll avoid using low fees.
 // * InMempool - the tx has 0 confirmations
 // * Confirmed - the tx has at least 1 confirmation. The exact number of confirmations is provided (number_of_blocks)
