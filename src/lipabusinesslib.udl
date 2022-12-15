@@ -1,7 +1,7 @@
 // The Lipa Business Library (LBL)
 //
-// The main goal of this library is to implement all cryptographic and
-// Bitcoin network functionality of the Lipa Wallet for business.
+// The main goal of this library is to provide all the required cryptographic
+// and Bitcoin protocol functionality for the 'Lipa Wallet for business'.
 
 // Use "Bitcoin" for production code (= runs on the Bitcoin mainnet)
 // Testnet and Signet are test *networks*, while Regtest enables an entirely local test environment
