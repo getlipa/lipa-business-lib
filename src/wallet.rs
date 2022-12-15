@@ -91,7 +91,7 @@ impl Wallet {
 
     pub fn prepare_drain_tx(&self, addr: String, confirm_in_blocks: u32) -> LipaResult<Tx> {
         let address = Address::from_str(&addr)
-            .map_to_invalid_input("Failed to parse the provided bitcoin address")?;
+            .map_to_invalid_input("Invalid bitcoin address")?;
 
         let wallet = self.wallet.lock().unwrap();
 
