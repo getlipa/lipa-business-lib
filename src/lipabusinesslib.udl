@@ -84,8 +84,8 @@ dictionary Config {
 //
 // Fields:
 // * confirmed - confirmed balance
-// * trusted_pending - pending balance that only we can double-spend
-// * untrusted_pending - pending balance that could be double-spent
+// * trusted_pending - pending balance that only the local wallet can double-spend
+// * untrusted_pending - pending balance that could be double-spent by others
 // * immature - only applicable to miners and should be ignored
 dictionary Balance {
     u64 confirmed;
@@ -112,7 +112,7 @@ interface Wallet {
     [Throws=LipaError]
     Balance sync_balance();
 
-    // Validates that an address is valid and we can send funds to it.
+    // Validates that an address is valid and the local wallet can send funds to it.
     AddressValidationResult validate_addr(string addr);
 
     // Constructs a tx that completely drains (sends all funds available) the wallet.
@@ -150,7 +150,8 @@ dictionary Tx {
 //
 // Variants:
 // * NotInMempool - the tx is neither confirmed nor in the mempool. Probably the on-chain fee was set too low
-//      and the tx got evicted from the mempool. This situation is unlikely given that we'll avoid using low fees.
+//      and the tx got evicted from the mempool. This situation is unlikely given that the local wallet will
+//      avoid using low fees.
 // * InMempool - the tx has 0 confirmations
 // * Confirmed - the tx has at least 1 confirmation. The exact number of confirmations is provided (number_of_blocks)
 //      and it's commonly accepted that 6 confirmations isn't reversible
