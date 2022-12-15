@@ -88,10 +88,10 @@ impl Wallet {
             Err(_) => return AddressValidationResult::Invalid,
         };
 
-        if address.network != self.wallet.lock().unwrap().network() {
-            AddressValidationResult::Invalid
-        } else {
+        if address.network == self.wallet.lock().unwrap().network() {
             AddressValidationResult::Valid
+        } else {
+            AddressValidationResult::Invalid
         }
     }
 
