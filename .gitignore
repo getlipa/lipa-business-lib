@@ -3,7 +3,7 @@
 
 /bindings
 
-.bdk-database
+.bdk-database*
 
 # Added by cargo
 /target
