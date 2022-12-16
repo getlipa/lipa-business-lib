@@ -5,15 +5,15 @@ use crate::RuntimeErrorCode::{
 use bdk::bitcoin::consensus::deserialize;
 use bdk::bitcoin::consensus::serialize;
 use bdk::bitcoin::psbt::Psbt;
-use bdk::bitcoin::{Address, Network};
-use bdk::blockchain::{Blockchain, ElectrumBlockchain};
+use bdk::bitcoin::{Address, Network, Txid};
+use bdk::blockchain::{Blockchain, ElectrumBlockchain, GetHeight};
 use bdk::database::MemoryDatabase;
 use bdk::electrum_client::Client;
 use bdk::sled::Tree;
 use bdk::{Balance, Error, SignOptions, SyncOptions};
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
 pub struct Config {
     pub electrum_url: String,
@@ -34,6 +34,7 @@ pub struct Tx {
     pub output_sat: u64,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum TxStatus {
     NotInMempool,
     InMempool,
@@ -68,9 +69,9 @@ impl Wallet {
     }
 
     pub fn sync_balance(&self) -> LipaResult<Balance> {
-        let wallet = self.wallet.lock().unwrap();
+        self.sync()?;
 
-        Self::sync_wallet(&wallet, &self.blockchain)?;
+        let wallet = self.wallet.lock().unwrap();
 
         let balance = wallet
             .get_balance()
@@ -101,9 +102,9 @@ impl Wallet {
             ));
         }
 
-        let wallet = self.wallet.lock().unwrap();
+        self.sync()?;
 
-        Self::sync_wallet(&wallet, &self.blockchain)?;
+        let wallet = self.wallet.lock().unwrap();
 
         let fee_rate = self
             .blockchain
@@ -167,8 +168,31 @@ impl Wallet {
             .map_to_runtime_error(ElectrumServiceUnavailable, "Failed to broadcast tx")
     }
 
-    pub fn get_tx_status(&self, _txid: String) -> LipaResult<TxStatus> {
-        todo!()
+    pub fn get_tx_status(&self, txid: String) -> LipaResult<TxStatus> {
+        let tx_id = Txid::from_str(&txid).map_to_invalid_input("Invalid tx id")?;
+
+        self.sync()?;
+
+        let wallet = self.wallet.lock().unwrap();
+
+        let include_raw = false;
+        let tx = wallet
+            .get_tx(&tx_id, include_raw)
+            .map_to_runtime_error(ElectrumServiceUnavailable, "Failed to get tx status")?;
+
+        let status = match tx {
+            None => TxStatus::NotInMempool,
+            Some(tx) => match tx.confirmation_time {
+                None => TxStatus::InMempool,
+                Some(block_time) => {
+                    let tip = self.get_tip()?;
+                    debug_assert!(tip >= block_time.height);
+                    let number_of_blocks = 1 + tip - block_time.height;
+                    TxStatus::Confirmed { number_of_blocks }
+                }
+            },
+        };
+        Ok(status)
     }
 
     // Not needed for now
@@ -185,12 +209,17 @@ impl Wallet {
         Ok(address.to_string())
     }*/
 
-    fn sync_wallet(
-        wallet: &MutexGuard<bdk::Wallet<Tree>>,
-        blockchain: &ElectrumBlockchain,
-    ) -> LipaResult<()> {
-        wallet
-            .sync(blockchain, SyncOptions::default())
+    fn get_tip(&self) -> LipaResult<u32> {
+        self.blockchain
+            .get_height()
+            .map_to_runtime_error(ElectrumServiceUnavailable, "Failed to query tip")
+    }
+
+    fn sync(&self) -> LipaResult<()> {
+        self.wallet
+            .lock()
+            .unwrap()
+            .sync(&self.blockchain, SyncOptions::default())
             .map_err(|e| match e {
                 Error::Electrum(_) => runtime_error(ElectrumServiceUnavailable, e),
                 Error::Sled(e) => permanent_failure(e),
