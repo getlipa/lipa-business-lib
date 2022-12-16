@@ -1,13 +1,16 @@
-use crate::errors::{permanent_failure, runtime_error, LipaResult, MapToLipaError};
-use crate::RuntimeErrorCode::{ElectrumServiceUnavailable, GenericError, RemoteServiceUnavailable};
+use crate::errors::{invalid_input, permanent_failure, runtime_error, LipaResult, MapToLipaError};
+use crate::RuntimeErrorCode::{
+    ElectrumServiceUnavailable, GenericError, NotEnoughFunds, RemoteServiceUnavailable,
+};
+use bdk::bitcoin::consensus::serialize;
 use bdk::bitcoin::{Address, Network};
-use bdk::blockchain::ElectrumBlockchain;
+use bdk::blockchain::{Blockchain, ElectrumBlockchain};
 use bdk::electrum_client::Client;
 use bdk::sled::Tree;
-use bdk::{Balance, SyncOptions};
+use bdk::{Balance, Error, SyncOptions};
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 pub struct Config {
     pub electrum_url: String,
@@ -64,16 +67,7 @@ impl Wallet {
     pub fn sync_balance(&self) -> LipaResult<Balance> {
         let wallet = self.wallet.lock().unwrap();
 
-        match wallet.sync(&self.blockchain, SyncOptions::default()) {
-            Ok(_) => {}
-            Err(e) => {
-                return match e {
-                    bdk::Error::Electrum(e) => Err(runtime_error(ElectrumServiceUnavailable, e)),
-                    bdk::Error::Sled(e) => Err(permanent_failure(e)),
-                    _ => Err(runtime_error(GenericError, "Failed to sync the BDK wallet")),
-                }
-            }
-        };
+        Self::sync_wallet(&wallet, &self.blockchain)?;
 
         let balance = wallet
             .get_balance()
@@ -95,8 +89,52 @@ impl Wallet {
         }
     }
 
-    pub fn prepare_drain_tx(&self, _addr: String) -> LipaResult<Tx> {
-        todo!()
+    pub fn prepare_drain_tx(&self, addr: String, confirm_in_blocks: u32) -> LipaResult<Tx> {
+        let address = Address::from_str(&addr).map_to_invalid_input("Invalid bitcoin address")?;
+
+        if !(1..=25).contains(&confirm_in_blocks) {
+            return Err(invalid_input(
+                "Invalid block confirmation target. Please use a target in the range [1; 25]",
+            ));
+        }
+
+        let wallet = self.wallet.lock().unwrap();
+
+        Self::sync_wallet(&wallet, &self.blockchain)?;
+
+        let fee_rate = self
+            .blockchain
+            .estimate_fee(confirm_in_blocks as usize)
+            .map_to_runtime_error(
+                ElectrumServiceUnavailable,
+                "Failed to estimate fee for drain tx",
+            )?;
+
+        let mut tx_builder = wallet.build_tx();
+
+        tx_builder
+            .drain_wallet()
+            .drain_to(address.script_pubkey())
+            .fee_rate(fee_rate)
+            .enable_rbf();
+
+        let (psbt, tx_details) = tx_builder
+            .finish()
+            .map_to_runtime_error(NotEnoughFunds, "Failed to create PSBT")?;
+
+        let fee = match tx_details.fee {
+            None => return Err(permanent_failure("Empty fee using an Electrum backend")),
+            Some(f) => f,
+        };
+
+        let tx = Tx {
+            id: tx_details.txid.to_string(),
+            blob: serialize(&psbt),
+            on_chain_fee_sat: fee,
+            output_sat: tx_details.sent - fee,
+        };
+
+        Ok(tx)
     }
 
     pub fn sign_and_broadcast_tx(
@@ -133,6 +171,19 @@ impl Wallet {
 
         Ok(address.to_string())
     }*/
+
+    fn sync_wallet(
+        wallet: &MutexGuard<bdk::Wallet<Tree>>,
+        blockchain: &ElectrumBlockchain,
+    ) -> LipaResult<()> {
+        wallet
+            .sync(blockchain, SyncOptions::default())
+            .map_err(|e| match e {
+                Error::Electrum(_) => runtime_error(ElectrumServiceUnavailable, e),
+                Error::Sled(e) => permanent_failure(e),
+                _ => runtime_error(GenericError, "Failed to sync the BDK wallet"),
+            })
+    }
 }
 
 #[cfg(test)]

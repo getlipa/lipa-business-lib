@@ -24,6 +24,7 @@ enum LogLevel {
 enum RuntimeErrorCode {
     "RemoteServiceUnavailable", // A remote service is unavailable. Could there be a loss of internet connection?
     "ElectrumServiceUnavailable", // The electrum service is unavailable. Could there be a loss of internet connection?
+    "NotEnoughFunds", // There are not enough funds to create the tx that was requested
     "GenericError", // A generic error for unexpected/unknown runtime errors
 };
 
@@ -117,8 +118,13 @@ interface Wallet {
 
     // Constructs a tx that completely drains (sends all funds available) the wallet.
     // The tx is not actually broadcast here.
+    //
+    // Parameters:
+    // * addr - the layer 1 address to send to.
+    // * confirm_in_blocks - the target number of blocks used to estimate the on-chain fee.
+    //      The lower this number, the higher the fee will be.
     [Throws=LipaError]
-    Tx prepare_drain_tx(string addr);
+    Tx prepare_drain_tx(string addr, u32 confirm_in_blocks);
 
     // Signs and broadcasts a provided tx. Requires a spend descriptor to be used to sign the transaction.
     [Throws=LipaError]

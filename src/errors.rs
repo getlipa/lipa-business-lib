@@ -19,6 +19,7 @@ use std::fmt::{Display, Formatter};
 pub enum RuntimeErrorCode {
     RemoteServiceUnavailable,
     ElectrumServiceUnavailable,
+    NotEnoughFunds,
     GenericError,
 }
 
