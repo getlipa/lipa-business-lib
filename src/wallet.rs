@@ -102,8 +102,6 @@ impl Wallet {
 
         Self::sync_wallet(&wallet, &self.blockchain)?;
 
-        let mut tx_builder = wallet.build_tx();
-
         let fee_rate = self
             .blockchain
             .estimate_fee(confirm_in_blocks as usize)
@@ -111,6 +109,8 @@ impl Wallet {
                 ElectrumServiceUnavailable,
                 "Failed to estimate fee for drain tx",
             )?;
+
+        let mut tx_builder = wallet.build_tx();
 
         tx_builder
             .drain_wallet()
