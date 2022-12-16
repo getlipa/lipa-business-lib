@@ -103,7 +103,9 @@ mod nigiri_tests {
     use bdk::Balance;
     use std::fs::remove_dir_all;
     use std::str::FromStr;
-    use uniffi_lipabusinesslib::{Config, Wallet};
+    use std::thread::sleep;
+    use std::time::Duration;
+    use uniffi_lipabusinesslib::{Config, TxStatus, Wallet};
 
     const REGTEST_WATCH_DESCRIPTOR: &str = "wpkh([aeaaaa34/84'/1'/0']tpubDD9QqCT2Y9P3BV7o8a8ajDqHmwWq5XAHKsunr9vjGVYKiRdFQqqC9wuq7jgKdUi8YesiTHiAkNurq7mx7dLDGRCxY4v8fbSa8ZS53MxLrP2/0/*)";
     const REGTEST_SPEND_DESCRIPTOR: &str = "wpkh([aeaaaa34]tprv8ZgxMBicQKsPd8WGzHdgwybWcHrnFkedrEpLTrVR2hfeVPcNUV7K3TT8oSVuNAuotQAevK5S34gWtaMKGoreD2Sq7Mp5HnXqMfxwfiDnVBF/84'/1'/0'/0/*)";
@@ -158,6 +160,11 @@ mod nigiri_tests {
                 .script_pubkey()
         );
 
+        assert_eq!(
+            wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
+            TxStatus::NotInMempool
+        );
+
         wallet
             .sign_and_broadcast_tx(drain_tx.blob, REGTEST_SPEND_DESCRIPTOR.to_string())
             .unwrap();
@@ -170,8 +177,41 @@ mod nigiri_tests {
                 untrusted_pending: 0,
                 confirmed: 0
             }
-        )
+        );
 
-        // TODO: test get_tx_status()
+        assert_eq!(
+            wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
+            TxStatus::InMempool
+        );
+
+        nigiri::mine_blocks(1).unwrap();
+        sleep(Duration::from_secs(5));
+
+        assert_eq!(
+            wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
+            TxStatus::Confirmed {
+                number_of_blocks: 1
+            }
+        );
+
+        nigiri::mine_blocks(1).unwrap();
+        sleep(Duration::from_secs(5));
+
+        assert_eq!(
+            wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
+            TxStatus::Confirmed {
+                number_of_blocks: 2
+            }
+        );
+
+        nigiri::mine_blocks(10).unwrap();
+        sleep(Duration::from_secs(5));
+
+        assert_eq!(
+            wallet.get_tx_status(drain_tx.id).unwrap(),
+            TxStatus::Confirmed {
+                number_of_blocks: 12
+            }
+        );
     }
 }
