@@ -1,8 +1,8 @@
 #[cfg(feature = "nigiri")]
 #[allow(dead_code)]
 pub mod nigiri {
-    use bdk::blockchain::{ElectrumBlockchain, GetHeight};
-    use bdk::electrum_client::Client;
+    use bdk::bitcoin::Txid;
+    use bdk::electrum_client::{Client, ElectrumApi};
     use log::debug;
     use simplelog::SimpleLogger;
     use std::process::{Command, Output};
@@ -45,13 +45,27 @@ pub mod nigiri {
     }
 
     fn wait_for_electrum() {
-        let client = Client::new("localhost:50000").unwrap();
-        let blockchain = ElectrumBlockchain::from(client);
+        debug!("Waiting for Electrum ...");
+        let client = Client::new("tcp://localhost:50000").unwrap();
 
         let mut i = 0u8;
-        while let Err(e) = blockchain.get_height() {
+        while let Err(e) = client.ping() {
             if i == 15 {
                 panic!("Failed to start NIGIRI: {}", e);
+            }
+            i += 1;
+            sleep(Duration::from_secs(1));
+        }
+    }
+
+    pub fn wait_for_electrum_to_see_tx(tx_id: &Txid) {
+        debug!("Waiting for Electrum to see tx {} ...", tx_id);
+        let client = Client::new("tcp://localhost:50000").unwrap();
+
+        let mut i = 0u8;
+        while let Err(e) = client.transaction_get(tx_id) {
+            if i == 15 {
+                panic!("Failed to see tx ({}):{}", tx_id, e);
             }
             i += 1;
             sleep(Duration::from_secs(1));
@@ -68,14 +82,19 @@ pub mod nigiri {
         Ok(())
     }
 
-    pub fn fund_address(amount_btc: f32, address: &str) -> Result<(), String> {
-        let cmd = &["nigiri", "faucet", &address, &amount_btc.to_string()];
+    pub fn fund_address(amount_btc: f32, address: &str) -> Result<Txid, String> {
+        debug!("Funding {} btc onto {} ...", amount_btc, address);
+        let cmd = &["nigiri", "faucet", address, &amount_btc.to_string()];
 
         let output = exec(cmd);
         if !output.status.success() {
             return Err(produce_cmd_err_msg(cmd, output));
         }
-        Ok(())
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let (_, tx_id) = stdout.split_once(' ').unwrap();
+        use std::str::FromStr;
+        let tx_id = Txid::from_str(tx_id.trim()).unwrap();
+        Ok(tx_id)
     }
 
     pub fn exec(params: &[&str]) -> Output {

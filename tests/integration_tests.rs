@@ -97,15 +97,12 @@ fn test_drain_empty_wallet() {
 #[cfg(feature = "nigiri")]
 mod nigiri_tests {
     use crate::setup::nigiri;
-    use crate::try_cmd_repeatedly;
     use bdk::bitcoin::consensus::deserialize;
     use bdk::bitcoin::psbt::Psbt;
     use bdk::bitcoin::{Address, Network};
     use bdk::Balance;
     use std::fs::remove_dir_all;
     use std::str::FromStr;
-    use std::thread::sleep;
-    use std::time::Duration;
     use uniffi_lipabusinesslib::{Config, Wallet};
 
     const REGTEST_WATCH_DESCRIPTOR: &str = "wpkh([aeaaaa34/84'/1'/0']tpubDD9QqCT2Y9P3BV7o8a8ajDqHmwWq5XAHKsunr9vjGVYKiRdFQqqC9wuq7jgKdUi8YesiTHiAkNurq7mx7dLDGRCxY4v8fbSa8ZS53MxLrP2/0/*)";
@@ -128,15 +125,8 @@ mod nigiri_tests {
         })
         .unwrap();
 
-        try_cmd_repeatedly!(
-            nigiri::fund_address,
-            10,
-            Duration::from_millis(500),
-            0.1,
-            REGTEST_ADDR
-        );
-
-        sleep(Duration::from_secs(5));
+        let tx_id = nigiri::fund_address(0.1, REGTEST_ADDR).unwrap();
+        nigiri::wait_for_electrum_to_see_tx(&tx_id);
 
         assert_eq!(
             wallet.sync_balance().unwrap(),
