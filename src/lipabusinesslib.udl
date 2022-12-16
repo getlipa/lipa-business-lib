@@ -120,7 +120,7 @@ interface Wallet {
     // The tx is not actually broadcast here.
     //
     // Parameters:
-    // * addr - the address to send to.
+    // * addr - the layer 1 address to send to.
     // * confirm_in_blocks - the target number of blocks used to estimate the on-chain fee.
     //      The lower this number, the higher the fee will be.
     [Throws=LipaError]
