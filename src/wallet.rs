@@ -2,12 +2,15 @@ use crate::errors::{invalid_input, permanent_failure, runtime_error, LipaResult,
 use crate::RuntimeErrorCode::{
     ElectrumServiceUnavailable, GenericError, NotEnoughFunds, RemoteServiceUnavailable,
 };
+use bdk::bitcoin::consensus::deserialize;
 use bdk::bitcoin::consensus::serialize;
+use bdk::bitcoin::psbt::Psbt;
 use bdk::bitcoin::{Address, Network};
 use bdk::blockchain::{Blockchain, ElectrumBlockchain};
+use bdk::database::MemoryDatabase;
 use bdk::electrum_client::Client;
 use bdk::sled::Tree;
-use bdk::{Balance, Error, SyncOptions};
+use bdk::{Balance, Error, SignOptions, SyncOptions};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -139,10 +142,29 @@ impl Wallet {
 
     pub fn sign_and_broadcast_tx(
         &self,
-        _tx_blob: Vec<u8>,
-        _spend_descriptor: String,
+        tx_blob: Vec<u8>,
+        spend_descriptor: String,
     ) -> LipaResult<()> {
-        todo!()
+        let mut psbt = deserialize::<Psbt>(&tx_blob).map_to_invalid_input("Invalid tx blob")?;
+
+        let wallet = bdk::Wallet::new(
+            &spend_descriptor,
+            None,
+            self.wallet.lock().unwrap().network(),
+            MemoryDatabase::new(),
+        )
+        .unwrap();
+
+        let is_finalized = wallet
+            .sign(&mut psbt, SignOptions::default())
+            .map_to_permanent_failure("Failed to sign PSBT")?;
+        if !is_finalized {
+            return Err(permanent_failure("Wallet didn't sign all inputs"));
+        }
+
+        self.blockchain
+            .broadcast(&psbt.extract_tx())
+            .map_to_runtime_error(ElectrumServiceUnavailable, "Failed to broadcast tx")
     }
 
     pub fn get_tx_status(&self, _txid: String) -> LipaResult<TxStatus> {
@@ -150,24 +172,15 @@ impl Wallet {
     }
 
     // Not needed for now
-    /*pub fn get_address(&self, watch_descriptor: String) -> Result<String, WalletError> {
-        let wallet = bdk::Wallet::new(
-            &watch_descriptor,
-            None,
-            self.config.network,
-            MemoryDatabase::default(),
-        )
-        .map_err(|e| WalletError::BdkWallet {
-            message: e.to_string(),
-        })?;
+    /*pub fn get_address(&self) -> LipaResult<String> {
+        let wallet = self.wallet.lock().unwrap();
 
-        wallet
-            .sync(&self.blockchain, SyncOptions::default())
-            .map_err(|e| WalletError::ChainSync {
-                message: e.to_string(),
-            })?;
+        Self::sync_wallet(&wallet, &self.blockchain)?;
 
-        let address = wallet.get_address(AddressIndex::LastUnused).unwrap().address;
+        let address = wallet
+            .get_address(AddressIndex::LastUnused)
+            .unwrap()
+            .address;
 
         Ok(address.to_string())
     }*/
@@ -190,6 +203,7 @@ impl Wallet {
 pub mod test {
     use crate::{AddressValidationResult, Config, Wallet};
     use bdk::bitcoin::Network;
+    use std::fs::remove_dir_all;
 
     const MAINNET_WATCH_DESCRIPTOR: &str = "wpkh([ddd71d79/84'/0'/0']xpub6Cg6Y9ynKKSjZ1EwscvwerJMU1PPPcdhjr2tQ783zE31NUfAF1EMY4qiEBfKkExF3eBruUiSpGZLeCaFiJZSeh3HzAjNANx3TT8QxdN8GUd/0/*)";
 
@@ -211,9 +225,11 @@ pub mod test {
 
     #[test]
     fn test_address_validation_testnet() {
+        let _ = remove_dir_all(".bdk-database-testnet");
+
         let wallet = Wallet::new(Config {
             electrum_url: "ssl://electrum.blockstream.info:60002".to_string(),
-            wallet_db_path: ".bdk-database".to_string(),
+            wallet_db_path: ".bdk-database-testnet".to_string(),
             network: Network::Testnet,
             watch_descriptor: TESTNET_WATCH_DESCRIPTOR.to_string(),
         })
@@ -270,6 +286,8 @@ pub mod test {
 
     #[test]
     fn test_address_validation_mainnet() {
+        let _ = remove_dir_all(".bdk-database-mainnet");
+
         let wallet = Wallet::new(Config {
             electrum_url: "ssl://electrum.blockstream.info:50002".to_string(),
             wallet_db_path: ".bdk-database-mainnet".to_string(),
