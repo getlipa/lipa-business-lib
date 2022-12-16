@@ -8,7 +8,7 @@ crate-type = ["lib", "staticlib", "cdylib"]
 name = "uniffi_lipabusinesslib"
 
 [features]
-nigiri = []
+nigiri = ["simplelog"]
 
 [dependencies]
 uniffi = "0.21.0"
@@ -19,11 +19,7 @@ rand = "0.8.5"
 secp256k1 = { version = "0.24.1", features = ["bitcoin_hashes", "global-context"] }
 sled = "0.34.7"
 
-[dev-dependencies]
-simplelog = { version ="0.12.0", features = ["test"] }
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["simplelog"]
+simplelog = { version ="0.12.0", features = ["test"], optional = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 oslog = "0.2.0"
