@@ -7,7 +7,7 @@ use bdk::bitcoin::{Address, Network};
 use bdk::blockchain::{Blockchain, ElectrumBlockchain};
 use bdk::electrum_client::Client;
 use bdk::sled::Tree;
-use bdk::{Balance, SyncOptions};
+use bdk::{Balance, Error, SyncOptions};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -176,17 +176,13 @@ impl Wallet {
         wallet: &MutexGuard<bdk::Wallet<Tree>>,
         blockchain: &ElectrumBlockchain,
     ) -> LipaResult<()> {
-        match wallet.sync(blockchain, SyncOptions::default()) {
-            Ok(()) => {}
-            Err(e) => {
-                return match e {
-                    bdk::Error::Electrum(e) => Err(runtime_error(ElectrumServiceUnavailable, e)),
-                    bdk::Error::Sled(e) => Err(permanent_failure(e)),
-                    _ => Err(runtime_error(GenericError, "Failed to sync the BDK wallet")),
-                }
-            }
-        };
-        Ok(())
+        wallet
+            .sync(blockchain, SyncOptions::default())
+            .map_err(|e| match e {
+                Error::Electrum(_) => runtime_error(ElectrumServiceUnavailable, e),
+                Error::Sled(e) => permanent_failure(e),
+                _ => runtime_error(GenericError, "Failed to sync the BDK wallet"),
+            })
     }
 }
 
