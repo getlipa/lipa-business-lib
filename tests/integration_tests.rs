@@ -1,6 +1,9 @@
+mod setup;
+
 use bdk::bitcoin::consensus::deserialize;
 use bdk::bitcoin::psbt::Psbt;
 use bdk::bitcoin::{Address, Network, Txid};
+use std::fs::remove_dir_all;
 use std::str::FromStr;
 use uniffi_lipabusinesslib::RuntimeErrorCode::NotEnoughFunds;
 use uniffi_lipabusinesslib::{Config, LipaError, Wallet};
@@ -11,9 +14,11 @@ const WATCH_DESCRIPTOR_WITHOUT_FUNDS: &str = "wpkh([e6224ca3/84'/1'/0']tpubDCvC1
 
 #[test]
 fn test_get_balance_testnet_electrum() {
+    let _ = remove_dir_all(".bdk-database-get-balance");
+
     let wallet = Wallet::new(Config {
         electrum_url: "ssl://electrum.blockstream.info:60002".to_string(),
-        wallet_db_path: ".bdk-database".to_string(),
+        wallet_db_path: ".bdk-database-get-balance".to_string(),
         network: Network::Testnet,
         watch_descriptor: WATCH_DESCRIPTOR_WITH_FUNDS.to_string(),
     })
@@ -27,10 +32,12 @@ fn test_get_balance_testnet_electrum() {
 const TESTNET_ADDR: &str = "tb1q3ctet25lk00cmvrtkmu9dmah2kj077m4n4aqtm";
 
 #[test]
-fn test_drain_wallet() {
+fn test_prepare_drain_tx() {
+    let _ = remove_dir_all(".bdk-database-prepare-drain-tx");
+
     let wallet = Wallet::new(Config {
         electrum_url: "ssl://electrum.blockstream.info:60002".to_string(),
-        wallet_db_path: ".bdk-database2".to_string(),
+        wallet_db_path: ".bdk-database-prepare-drain-tx".to_string(),
         network: Network::Testnet,
         watch_descriptor: WATCH_DESCRIPTOR_WITH_FUNDS.to_string(),
     })
@@ -62,9 +69,11 @@ fn test_drain_wallet() {
 
 #[test]
 fn test_drain_empty_wallet() {
+    let _ = remove_dir_all(".bdk-database-drain-empty-wallet");
+
     let wallet = Wallet::new(Config {
         electrum_url: "ssl://electrum.blockstream.info:60002".to_string(),
-        wallet_db_path: ".bdk-database3".to_string(),
+        wallet_db_path: ".bdk-database-drain-empty-wallet".to_string(),
         network: Network::Testnet,
         watch_descriptor: WATCH_DESCRIPTOR_WITHOUT_FUNDS.to_string(),
     })
@@ -80,4 +89,89 @@ fn test_drain_empty_wallet() {
             ..
         })
     ));
+}
+
+// Caution: Run these tests sequentially, otherwise they will corrupt each other,
+//      because they are manipulating their environment:
+//      cargo test --features nigiri -- --test-threads 1
+#[cfg(feature = "nigiri")]
+mod nigiri_tests {
+    use crate::setup::nigiri;
+    use bdk::bitcoin::consensus::deserialize;
+    use bdk::bitcoin::psbt::Psbt;
+    use bdk::bitcoin::{Address, Network};
+    use bdk::Balance;
+    use std::fs::remove_dir_all;
+    use std::str::FromStr;
+    use uniffi_lipabusinesslib::{Config, Wallet};
+
+    const REGTEST_WATCH_DESCRIPTOR: &str = "wpkh([aeaaaa34/84'/1'/0']tpubDD9QqCT2Y9P3BV7o8a8ajDqHmwWq5XAHKsunr9vjGVYKiRdFQqqC9wuq7jgKdUi8YesiTHiAkNurq7mx7dLDGRCxY4v8fbSa8ZS53MxLrP2/0/*)";
+    const REGTEST_SPEND_DESCRIPTOR: &str = "wpkh([aeaaaa34]tprv8ZgxMBicQKsPd8WGzHdgwybWcHrnFkedrEpLTrVR2hfeVPcNUV7K3TT8oSVuNAuotQAevK5S34gWtaMKGoreD2Sq7Mp5HnXqMfxwfiDnVBF/84'/1'/0'/0/*)";
+    const REGTEST_ADDR: &str = "bcrt1qce9wdd4hsux69wnencqp24mkzu5wj8uu0swyn4";
+
+    const REGTEST_TARGET_ADDR: &str = "bcrt1q2f0wx5xss0sph7ev6cmxtpt423vlk9q0th8waj";
+
+    #[test]
+    fn test_drain_flow() {
+        let _ = remove_dir_all(".bdk-database-drain-funds");
+
+        nigiri::start();
+
+        let wallet = Wallet::new(Config {
+            electrum_url: "localhost:50000".to_string(),
+            wallet_db_path: ".bdk-database-drain-funds".to_string(),
+            network: Network::Regtest,
+            watch_descriptor: REGTEST_WATCH_DESCRIPTOR.to_string(),
+        })
+        .unwrap();
+
+        let tx_id = nigiri::fund_address(0.1, REGTEST_ADDR).unwrap();
+        nigiri::wait_for_electrum_to_see_tx(&tx_id);
+
+        assert_eq!(
+            wallet.sync_balance().unwrap(),
+            Balance {
+                immature: 0,
+                trusted_pending: 0,
+                untrusted_pending: 0,
+                confirmed: 10_000_000,
+            }
+        );
+
+        let drain_tx = wallet
+            .prepare_drain_tx(REGTEST_TARGET_ADDR.to_string(), 1)
+            .unwrap();
+
+        assert_eq!(drain_tx.output_sat + drain_tx.on_chain_fee_sat, 10_000_000);
+
+        let psbt = deserialize::<Psbt>(&drain_tx.blob).unwrap();
+
+        assert_eq!(psbt.unsigned_tx.output.len(), 1);
+        assert_eq!(
+            psbt.unsigned_tx.output.get(0).unwrap().value,
+            drain_tx.output_sat
+        );
+        assert_eq!(
+            psbt.unsigned_tx.output.get(0).unwrap().script_pubkey,
+            Address::from_str(REGTEST_TARGET_ADDR)
+                .unwrap()
+                .script_pubkey()
+        );
+
+        wallet
+            .sign_and_broadcast_tx(drain_tx.blob, REGTEST_SPEND_DESCRIPTOR.to_string())
+            .unwrap();
+
+        assert_eq!(
+            wallet.sync_balance().unwrap(),
+            Balance {
+                immature: 0,
+                trusted_pending: 0,
+                untrusted_pending: 0,
+                confirmed: 0
+            }
+        )
+
+        // TODO: test get_tx_status()
+    }
 }
