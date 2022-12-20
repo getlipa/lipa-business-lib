@@ -33,42 +33,35 @@ impl Display for RuntimeErrorCode {
 pub enum LipaError {
     /// Invalid input.
     /// Consider fixing the input and retrying the request.
-    #[error("InvalidInput: {message}")]
-    InvalidInput { message: String },
+    #[error("InvalidInput: {msg}")]
+    InvalidInput { msg: String },
 
     /// Recoverable problem (e.g. network issue, problem with en external service).
     /// Consider retrying the request.
-    #[error("RuntimeError: {code} - {message}")]
-    RuntimeError {
-        code: RuntimeErrorCode,
-        message: String,
-    },
+    #[error("RuntimeError: {code} - {msg}")]
+    RuntimeError { code: RuntimeErrorCode, msg: String },
 
     /// Unrecoverable problem (e.g. internal invariant broken).
     /// Consider suggesting the user to report the issue to the developers.
-    #[error("PermanentFailure: {message}")]
-    PermanentFailure { message: String },
+    #[error("PermanentFailure: {msg}")]
+    PermanentFailure { msg: String },
 }
 
 #[allow(dead_code)]
 pub fn invalid_input<E: ToString>(e: E) -> LipaError {
-    LipaError::InvalidInput {
-        message: e.to_string(),
-    }
+    LipaError::InvalidInput { msg: e.to_string() }
 }
 
 #[allow(dead_code)]
 pub fn runtime_error<E: ToString>(code: RuntimeErrorCode, e: E) -> LipaError {
     LipaError::RuntimeError {
         code,
-        message: e.to_string(),
+        msg: e.to_string(),
     }
 }
 
 pub fn permanent_failure<E: ToString>(e: E) -> LipaError {
-    LipaError::PermanentFailure {
-        message: e.to_string(),
-    }
+    LipaError::PermanentFailure { msg: e.to_string() }
 }
 
 pub type LipaResult<T> = Result<T, LipaError>;
@@ -83,14 +76,14 @@ pub trait LipaResultTrait<T> {
     /// becomes `PermanentFailure`.
     fn lift_invalid_input(self) -> LipaResult<T>;
 
-    fn prefix_error<M: ToString + 'static>(self, message: M) -> LipaResult<T>;
+    fn prefix_error<M: ToString + 'static>(self, msg: M) -> LipaResult<T>;
 }
 
 impl<T> LipaResultTrait<T> for LipaResult<T> {
     fn lift_invalid_input(self) -> LipaResult<T> {
         self.map_err(|e| match e {
-            LipaError::InvalidInput { message } => LipaError::PermanentFailure {
-                message: format!("InvalidInput: {}", message),
+            LipaError::InvalidInput { msg } => LipaError::PermanentFailure {
+                msg: format!("InvalidInput: {}", msg),
             },
             another_error => another_error,
         })
@@ -98,80 +91,70 @@ impl<T> LipaResultTrait<T> for LipaResult<T> {
 
     fn prefix_error<M: ToString + 'static>(self, prefix: M) -> LipaResult<T> {
         self.map_err(|e| match e {
-            LipaError::InvalidInput { message } => LipaError::InvalidInput {
-                message: format!("{}: {}", prefix.to_string(), message),
+            LipaError::InvalidInput { msg } => LipaError::InvalidInput {
+                msg: format!("{}: {}", prefix.to_string(), msg),
             },
-            LipaError::RuntimeError { code, message } => LipaError::RuntimeError {
+            LipaError::RuntimeError { code, msg } => LipaError::RuntimeError {
                 code,
-                message: format!("{}: {}", prefix.to_string(), message),
+                msg: format!("{}: {}", prefix.to_string(), msg),
             },
-            LipaError::PermanentFailure { message } => LipaError::PermanentFailure {
-                message: format!("{}: {}", prefix.to_string(), message),
+            LipaError::PermanentFailure { msg } => LipaError::PermanentFailure {
+                msg: format!("{}: {}", prefix.to_string(), msg),
             },
         })
     }
 }
 
 pub trait MapToLipaError<T, E: ToString> {
-    fn map_to_invalid_input<M: ToString>(self, message: M) -> LipaResult<T>;
-    fn map_to_runtime_error<M: ToString>(self, code: RuntimeErrorCode, message: M)
-        -> LipaResult<T>;
-    fn map_to_permanent_failure<M: ToString>(self, message: M) -> LipaResult<T>;
+    fn map_to_invalid_input<M: ToString>(self, msg: M) -> LipaResult<T>;
+    fn map_to_runtime_error<M: ToString>(self, code: RuntimeErrorCode, msg: M) -> LipaResult<T>;
+    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> LipaResult<T>;
 }
 
 impl<T, E: ToString> MapToLipaError<T, E> for Result<T, E> {
-    fn map_to_invalid_input<M: ToString>(self, message: M) -> LipaResult<T> {
+    fn map_to_invalid_input<M: ToString>(self, msg: M) -> LipaResult<T> {
         self.map_err(move |e| LipaError::InvalidInput {
-            message: format!("{}: {}", message.to_string(), e.to_string()),
+            msg: format!("{}: {}", msg.to_string(), e.to_string()),
         })
     }
 
-    fn map_to_runtime_error<M: ToString>(
-        self,
-        code: RuntimeErrorCode,
-        message: M,
-    ) -> LipaResult<T> {
+    fn map_to_runtime_error<M: ToString>(self, code: RuntimeErrorCode, msg: M) -> LipaResult<T> {
         self.map_err(move |e| LipaError::RuntimeError {
             code,
-            message: format!("{}: {}", message.to_string(), e.to_string()),
+            msg: format!("{}: {}", msg.to_string(), e.to_string()),
         })
     }
 
-    fn map_to_permanent_failure<M: ToString>(self, message: M) -> LipaResult<T> {
+    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> LipaResult<T> {
         self.map_err(move |e| LipaError::PermanentFailure {
-            message: format!("{}: {}", message.to_string(), e.to_string()),
+            msg: format!("{}: {}", msg.to_string(), e.to_string()),
         })
     }
 }
 
 pub trait MapToLipaErrorForUnitType<T> {
-    fn map_to_invalid_input<M: ToString>(self, message: M) -> LipaResult<T>;
-    fn map_to_runtime_error<M: ToString>(self, code: RuntimeErrorCode, message: M)
-        -> LipaResult<T>;
-    fn map_to_permanent_failure<M: ToString>(self, message: M) -> LipaResult<T>;
+    fn map_to_invalid_input<M: ToString>(self, msg: M) -> LipaResult<T>;
+    fn map_to_runtime_error<M: ToString>(self, code: RuntimeErrorCode, msg: M) -> LipaResult<T>;
+    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> LipaResult<T>;
 }
 
 impl<T> MapToLipaErrorForUnitType<T> for Result<T, ()> {
-    fn map_to_invalid_input<M: ToString>(self, message: M) -> LipaResult<T> {
+    fn map_to_invalid_input<M: ToString>(self, msg: M) -> LipaResult<T> {
         self.map_err(move |()| LipaError::InvalidInput {
-            message: message.to_string(),
+            msg: msg.to_string(),
         })
     }
 
-    fn map_to_runtime_error<M: ToString>(
-        self,
-        code: RuntimeErrorCode,
-        message: M,
-    ) -> LipaResult<T> {
+    fn map_to_runtime_error<M: ToString>(self, code: RuntimeErrorCode, msg: M) -> LipaResult<T> {
         self.map_err(move |()| LipaError::RuntimeError {
             code,
-            message: message.to_string(),
+            msg: msg.to_string(),
         })
     }
 
-    fn map_to_permanent_failure<M: ToString>(self, message: M) -> LipaResult<T> {
+    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> LipaResult<T> {
         self.map_err(move |()| LipaError::PermanentFailure {
-            message: message.to_string(),
+            msg: msg.to_string(),
         })
     }
 }

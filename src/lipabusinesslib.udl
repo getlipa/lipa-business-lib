@@ -32,15 +32,15 @@ enum RuntimeErrorCode {
 interface LipaError {
     // Invalid input.
     // Consider fixing the input and retrying the request.
-    InvalidInput(string message);
+    InvalidInput(string msg);
 
     // Recoverable problem (e.g. network issue, problem with en external service).
     // Consider retrying the request.
-    RuntimeError(RuntimeErrorCode code, string message);
+    RuntimeError(RuntimeErrorCode code, string msg);
 
     // Unrecoverable problem (e.g. internal invariant broken).
     // Consider suggesting the user to report the issue to the developers.
-    PermanentFailure(string message);
+    PermanentFailure(string msg);
 };
 
 // A key pair with both keys encoded as a hex string.
