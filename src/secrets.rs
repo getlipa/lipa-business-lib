@@ -1,4 +1,5 @@
 use crate::errors::{permanent_failure, LipaResult, MapToLipaError};
+use bdk::bitcoin::hashes::hex::ToHex;
 use bdk::bitcoin::secp256k1::PublicKey;
 use bdk::bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, KeySource};
 use bdk::bitcoin::Network;
@@ -9,7 +10,6 @@ use bdk::keys::{DerivableKey, DescriptorKey, ExtendedKey};
 use bdk::miniscript::ToPublicKey;
 use rand::rngs::OsRng;
 use rand::RngCore;
-use secp256k1::hashes::hex::ToHex;
 use secp256k1::SECP256K1;
 use std::str::FromStr;
 
@@ -211,8 +211,8 @@ pub fn generate_keypair() -> KeyPair {
 #[cfg(test)]
 pub mod test {
     use super::*;
+    use bdk::bitcoin::hashes::hex::FromHex;
     use bdk::bitcoin::secp256k1::{PublicKey, SecretKey};
-    use secp256k1::hashes::hex::FromHex;
     use std::str::FromStr;
 
     // Values used for testing were obtained from https://iancoleman.io/bip39

@@ -1,8 +1,9 @@
 use crate::errors::{LipaResult, MapToLipaError};
+use bdk::bitcoin::hashes::hex::FromHex;
+use bdk::bitcoin::hashes::sha256;
+use bdk::bitcoin::secp256k1::Message;
 use bdk::bitcoin::secp256k1::SecretKey;
-use secp256k1::hashes::hex::FromHex;
-use secp256k1::hashes::sha256;
-use secp256k1::{Message, SECP256K1};
+use secp256k1::SECP256K1;
 
 pub fn sign(message: String, private_key: String) -> LipaResult<String> {
     let message = Message::from_hashed_data::<sha256::Hash>(message.as_bytes());
@@ -20,11 +21,11 @@ pub fn sign(message: String, private_key: String) -> LipaResult<String> {
 mod test {
     use crate::signing::sign;
     use crate::{derive_keys, generate_mnemonic};
+    use bdk::bitcoin::hashes::hex::FromHex;
+    use bdk::bitcoin::hashes::sha256;
     use bdk::bitcoin::secp256k1::ecdsa::Signature;
     use bdk::bitcoin::secp256k1::{Error, Message, PublicKey};
     use bdk::bitcoin::Network;
-    use secp256k1::hashes::hex::FromHex;
-    use secp256k1::hashes::sha256;
     use secp256k1::SECP256K1;
     use std::str::FromStr;
 
