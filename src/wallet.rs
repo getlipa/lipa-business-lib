@@ -10,6 +10,7 @@ use bdk::blockchain::{Blockchain, ElectrumBlockchain, GetHeight};
 use bdk::database::MemoryDatabase;
 use bdk::electrum_client::Client;
 use bdk::sled::Tree;
+use bdk::wallet::AddressIndex;
 use bdk::{Balance, Error, SignOptions, SyncOptions};
 use std::path::Path;
 use std::str::FromStr;
@@ -195,19 +196,18 @@ impl Wallet {
         Ok(status)
     }
 
-    // Not needed for now
-    /*pub fn get_address(&self) -> LipaResult<String> {
-        let wallet = self.wallet.lock().unwrap();
+    pub fn get_addr(&self) -> LipaResult<String> {
+        self.sync()?;
 
-        Self::sync_wallet(&wallet, &self.blockchain)?;
+        let wallet = self.wallet.lock().unwrap();
 
         let address = wallet
             .get_address(AddressIndex::LastUnused)
-            .unwrap()
+            .map_to_permanent_failure("Failed to get address from local BDK wallet")?
             .address;
 
         Ok(address.to_string())
-    }*/
+    }
 
     fn get_tip(&self) -> LipaResult<u32> {
         self.blockchain
