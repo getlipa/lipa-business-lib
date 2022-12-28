@@ -202,7 +202,7 @@ impl Wallet {
         let wallet = self.wallet.lock().unwrap();
 
         let address = wallet
-            .get_address(AddressIndex::LastUnused)
+            .get_address(AddressIndex::New)
             .map_to_permanent_failure("Failed to get address from local BDK wallet")?
             .address;
 
@@ -231,8 +231,9 @@ impl Wallet {
 #[cfg(test)]
 pub mod test {
     use crate::{AddressValidationResult, Config, Wallet};
-    use bdk::bitcoin::Network;
+    use bdk::bitcoin::{Address, AddressType, Network};
     use std::fs::remove_dir_all;
+    use std::str::FromStr;
 
     const MAINNET_WATCH_DESCRIPTOR: &str = "wpkh([ddd71d79/84'/0'/0']xpub6Cg6Y9ynKKSjZ1EwscvwerJMU1PPPcdhjr2tQ783zE31NUfAF1EMY4qiEBfKkExF3eBruUiSpGZLeCaFiJZSeh3HzAjNANx3TT8QxdN8GUd/0/*)";
 
@@ -372,5 +373,34 @@ pub mod test {
             wallet.validate_addr(LN_INVOICE.to_string()),
             AddressValidationResult::Invalid
         );
+    }
+
+    #[test]
+    fn test_get_addr() {
+        let _ = remove_dir_all(".bdk-database-get-addr");
+
+        let wallet = Wallet::new(Config {
+            electrum_url: "ssl://electrum.blockstream.info:60002".to_string(),
+            wallet_db_path: ".bdk-database-get-addr".to_string(),
+            network: Network::Testnet,
+            watch_descriptor: TESTNET_WATCH_DESCRIPTOR.to_string(),
+        })
+        .unwrap();
+
+        let addr = wallet.get_addr().unwrap();
+
+        assert_eq!(
+            wallet.validate_addr(addr.clone()),
+            AddressValidationResult::Valid
+        );
+        assert_eq!(Address::from_str(&addr).unwrap().network, Network::Testnet);
+        assert_eq!(
+            Address::from_str(&addr).unwrap().address_type().unwrap(),
+            AddressType::P2wpkh
+        );
+
+        let addr_2 = wallet.get_addr().unwrap();
+
+        assert_ne!(addr, addr_2);
     }
 }
