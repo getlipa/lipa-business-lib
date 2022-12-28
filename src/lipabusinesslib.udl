@@ -122,7 +122,7 @@ interface Wallet {
     // Parameters:
     // * addr - the layer 1 address to send to.
     // * confirm_in_blocks - the target number of blocks used to estimate the on-chain fee.
-    //      The lower this number, the higher the fee will be.
+    //      The lower this number, the higher the fee will be. Must be in the interval [1; 25].
     [Throws=LipaError]
     Tx prepare_drain_tx(string addr, u32 confirm_in_blocks);
 
