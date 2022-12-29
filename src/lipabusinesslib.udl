@@ -113,6 +113,10 @@ interface Wallet {
     [Throws=LipaError]
     Balance sync_balance();
 
+    // Get an unused P2WPKH address from the local wallet
+    [Throws=LipaError]
+    string get_addr();
+
     // Validates that an address is valid and the local wallet can send funds to it.
     AddressValidationResult validate_addr(string addr);
 

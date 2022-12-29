@@ -10,6 +10,7 @@ use bdk::blockchain::{Blockchain, ElectrumBlockchain, GetHeight};
 use bdk::database::MemoryDatabase;
 use bdk::electrum_client::Client;
 use bdk::sled::Tree;
+use bdk::wallet::AddressIndex;
 use bdk::{Balance, Error, SignOptions, SyncOptions};
 use std::path::Path;
 use std::str::FromStr;
@@ -195,19 +196,18 @@ impl Wallet {
         Ok(status)
     }
 
-    // Not needed for now
-    /*pub fn get_address(&self) -> LipaResult<String> {
+    pub fn get_addr(&self) -> LipaResult<String> {
+        self.sync()?;
+
         let wallet = self.wallet.lock().unwrap();
 
-        Self::sync_wallet(&wallet, &self.blockchain)?;
-
         let address = wallet
-            .get_address(AddressIndex::LastUnused)
-            .unwrap()
+            .get_address(AddressIndex::New)
+            .map_to_permanent_failure("Failed to get address from local BDK wallet")?
             .address;
 
         Ok(address.to_string())
-    }*/
+    }
 
     fn get_tip(&self) -> LipaResult<u32> {
         self.blockchain
@@ -231,8 +231,9 @@ impl Wallet {
 #[cfg(test)]
 pub mod test {
     use crate::{AddressValidationResult, Config, Wallet};
-    use bdk::bitcoin::Network;
+    use bdk::bitcoin::{Address, AddressType, Network};
     use std::fs::remove_dir_all;
+    use std::str::FromStr;
 
     const MAINNET_WATCH_DESCRIPTOR: &str = "wpkh([ddd71d79/84'/0'/0']xpub6Cg6Y9ynKKSjZ1EwscvwerJMU1PPPcdhjr2tQ783zE31NUfAF1EMY4qiEBfKkExF3eBruUiSpGZLeCaFiJZSeh3HzAjNANx3TT8QxdN8GUd/0/*)";
 
@@ -372,5 +373,34 @@ pub mod test {
             wallet.validate_addr(LN_INVOICE.to_string()),
             AddressValidationResult::Invalid
         );
+    }
+
+    #[test]
+    fn test_get_addr() {
+        let _ = remove_dir_all(".bdk-database-get-addr");
+
+        let wallet = Wallet::new(Config {
+            electrum_url: "ssl://electrum.blockstream.info:60002".to_string(),
+            wallet_db_path: ".bdk-database-get-addr".to_string(),
+            network: Network::Testnet,
+            watch_descriptor: TESTNET_WATCH_DESCRIPTOR.to_string(),
+        })
+        .unwrap();
+
+        let addr = wallet.get_addr().unwrap();
+
+        assert_eq!(
+            wallet.validate_addr(addr.clone()),
+            AddressValidationResult::Valid
+        );
+        assert_eq!(Address::from_str(&addr).unwrap().network, Network::Testnet);
+        assert_eq!(
+            Address::from_str(&addr).unwrap().address_type().unwrap(),
+            AddressType::P2wpkh
+        );
+
+        let addr_2 = wallet.get_addr().unwrap();
+
+        assert_ne!(addr, addr_2);
     }
 }

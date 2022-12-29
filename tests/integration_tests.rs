@@ -109,7 +109,6 @@ mod nigiri_tests {
 
     const REGTEST_WATCH_DESCRIPTOR: &str = "wpkh([aeaaaa34/84'/1'/0']tpubDD9QqCT2Y9P3BV7o8a8ajDqHmwWq5XAHKsunr9vjGVYKiRdFQqqC9wuq7jgKdUi8YesiTHiAkNurq7mx7dLDGRCxY4v8fbSa8ZS53MxLrP2/0/*)";
     const REGTEST_SPEND_DESCRIPTOR: &str = "wpkh([aeaaaa34]tprv8ZgxMBicQKsPd8WGzHdgwybWcHrnFkedrEpLTrVR2hfeVPcNUV7K3TT8oSVuNAuotQAevK5S34gWtaMKGoreD2Sq7Mp5HnXqMfxwfiDnVBF/84'/1'/0'/0/*)";
-    const REGTEST_ADDR: &str = "bcrt1qce9wdd4hsux69wnencqp24mkzu5wj8uu0swyn4";
 
     const REGTEST_TARGET_ADDR: &str = "bcrt1q2f0wx5xss0sph7ev6cmxtpt423vlk9q0th8waj";
 
@@ -127,7 +126,9 @@ mod nigiri_tests {
         })
         .unwrap();
 
-        let tx_id = nigiri::fund_address(0.1, REGTEST_ADDR).unwrap();
+        let our_addr = wallet.get_addr().unwrap();
+
+        let tx_id = nigiri::fund_address(0.1, &our_addr).unwrap();
         nigiri::wait_for_electrum_to_see_tx(&tx_id);
 
         assert_eq!(
