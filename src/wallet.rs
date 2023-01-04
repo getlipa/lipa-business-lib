@@ -132,7 +132,11 @@ impl Wallet {
             let txid = utxo.outpoint.txid;
             match Self::get_tx_status_internal(&wallet, txid, tip)? {
                 TxStatus::NotInMempool => {}
-                TxStatus::InMempool => {}
+                TxStatus::InMempool => {
+                    if required_confs == 0 {
+                        confirmed_utxo_outpoints.push(utxo.outpoint);
+                    }
+                }
                 TxStatus::Confirmed { number_of_blocks } => {
                     if number_of_blocks >= required_confs {
                         confirmed_utxo_outpoints.push(utxo.outpoint);
@@ -146,6 +150,7 @@ impl Wallet {
         tx_builder
             .add_utxos(&confirmed_utxo_outpoints)
             .map_to_permanent_failure("Failed to add utxos to tx builder")?
+            .manually_selected_only()
             .drain_to(address.script_pubkey())
             .fee_rate(fee_rate)
             .enable_rbf();
