@@ -95,12 +95,7 @@ impl Wallet {
         }
     }
 
-    pub fn prepare_drain_tx(
-        &self,
-        addr: String,
-        confirm_in_blocks: u32,
-        required_confs: u32,
-    ) -> LipaResult<Tx> {
+    pub fn prepare_drain_tx(&self, addr: String, confirm_in_blocks: u32) -> LipaResult<Tx> {
         let address = Address::from_str(&addr).map_to_invalid_input("Invalid bitcoin address")?;
 
         if !(1..=25).contains(&confirm_in_blocks) {
@@ -132,15 +127,9 @@ impl Wallet {
             let txid = utxo.outpoint.txid;
             match Self::get_tx_status_internal(&wallet, txid, tip)? {
                 TxStatus::NotInMempool => {}
-                TxStatus::InMempool => {
-                    if required_confs == 0 {
-                        confirmed_utxo_outpoints.push(utxo.outpoint);
-                    }
-                }
-                TxStatus::Confirmed { number_of_blocks } => {
-                    if number_of_blocks >= required_confs {
-                        confirmed_utxo_outpoints.push(utxo.outpoint);
-                    }
+                TxStatus::InMempool => {}
+                TxStatus::Confirmed { .. } => {
+                    confirmed_utxo_outpoints.push(utxo.outpoint);
                 }
             }
         }

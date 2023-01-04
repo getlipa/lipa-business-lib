@@ -44,7 +44,7 @@ fn test_prepare_drain_tx() {
     .unwrap();
 
     let drain_tx = wallet
-        .prepare_drain_tx(TESTNET_ADDR.to_string(), 1, 1)
+        .prepare_drain_tx(TESTNET_ADDR.to_string(), 1)
         .unwrap();
 
     assert_eq!(drain_tx.output_sat + drain_tx.on_chain_fee_sat, 88009);
@@ -79,7 +79,7 @@ fn test_drain_empty_wallet() {
     })
     .unwrap();
 
-    let drain_tx_result = wallet.prepare_drain_tx(TESTNET_ADDR.to_string(), 1, 1);
+    let drain_tx_result = wallet.prepare_drain_tx(TESTNET_ADDR.to_string(), 1);
 
     assert!(drain_tx_result.is_err());
     assert!(matches!(
@@ -148,7 +148,7 @@ mod nigiri_tests {
         );
 
         let drain_tx = wallet
-            .prepare_drain_tx(REGTEST_TARGET_ADDR.to_string(), 1, 1)
+            .prepare_drain_tx(REGTEST_TARGET_ADDR.to_string(), 1)
             .unwrap();
 
         assert_eq!(drain_tx.output_sat + drain_tx.on_chain_fee_sat, 20_000_000);
