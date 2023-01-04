@@ -6,6 +6,7 @@ pub mod nigiri {
     use log::debug;
     use simplelog::SimpleLogger;
     use std::process::{Command, Output};
+    use std::str::FromStr;
     use std::sync::Once;
     use std::thread::sleep;
     use std::time::Duration;
@@ -92,8 +93,29 @@ pub mod nigiri {
         }
         let stdout = String::from_utf8(output.stdout).unwrap();
         let (_, tx_id) = stdout.split_once(' ').unwrap();
-        use std::str::FromStr;
         let tx_id = Txid::from_str(tx_id.trim()).unwrap();
+        Ok(tx_id)
+    }
+
+    pub fn fund_address_without_conf(amount_btc: f32, address: &str) -> Result<Txid, String> {
+        debug!(
+            "Funding {} btc onto {} without automatic confirmation...",
+            amount_btc, address
+        );
+        let cmd = &[
+            "nigiri",
+            "rpc",
+            "sendtoaddress",
+            address,
+            &amount_btc.to_string(),
+        ];
+
+        let output = exec(cmd);
+        if !output.status.success() {
+            return Err(produce_cmd_err_msg(cmd, output));
+        }
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let tx_id = Txid::from_str(stdout.trim()).unwrap();
         Ok(tx_id)
     }
 
