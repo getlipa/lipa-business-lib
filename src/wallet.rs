@@ -1,11 +1,12 @@
 use crate::errors::{invalid_input, permanent_failure, runtime_error, LipaResult, MapToLipaError};
+use crate::RuntimeErrorCode;
 use crate::RuntimeErrorCode::{
     ElectrumServiceUnavailable, GenericError, NotEnoughFunds, RemoteServiceUnavailable,
 };
 use bdk::bitcoin::consensus::deserialize;
 use bdk::bitcoin::consensus::serialize;
 use bdk::bitcoin::psbt::Psbt;
-use bdk::bitcoin::{Address, Network, Txid};
+use bdk::bitcoin::{Address, Network, OutPoint, Txid};
 use bdk::blockchain::{Blockchain, ElectrumBlockchain, GetHeight};
 use bdk::database::MemoryDatabase;
 use bdk::electrum_client::Client;
@@ -115,10 +116,30 @@ impl Wallet {
                 "Failed to estimate fee for drain tx",
             )?;
 
+        let tip = self.get_tip()?;
+
+        let mut confirmed_utxo_outpoints: Vec<OutPoint> = Vec::new();
+
+        for utxo in wallet.list_unspent().map_to_runtime_error(
+            RuntimeErrorCode::NotEnoughFunds,
+            "No unspent UTXOs have been found",
+        )? {
+            let txid = utxo.outpoint.txid;
+            match Self::get_tx_status_internal(&wallet, txid, tip)? {
+                TxStatus::NotInMempool => {}
+                TxStatus::InMempool => {}
+                TxStatus::Confirmed { .. } => {
+                    confirmed_utxo_outpoints.push(utxo.outpoint);
+                }
+            }
+        }
+
         let mut tx_builder = wallet.build_tx();
 
         tx_builder
-            .drain_wallet()
+            .add_utxos(&confirmed_utxo_outpoints)
+            .map_to_permanent_failure("Failed to add utxos to tx builder")?
+            .manually_selected_only()
             .drain_to(address.script_pubkey())
             .fee_rate(fee_rate)
             .enable_rbf();
@@ -170,15 +191,24 @@ impl Wallet {
     }
 
     pub fn get_tx_status(&self, txid: String) -> LipaResult<TxStatus> {
-        let tx_id = Txid::from_str(&txid).map_to_invalid_input("Invalid tx id")?;
+        let txid = Txid::from_str(&txid).map_to_invalid_input("Invalid tx id")?;
 
         self.sync()?;
 
         let wallet = self.wallet.lock().unwrap();
 
+        let tip = self.get_tip()?;
+        Self::get_tx_status_internal(&wallet, txid, tip)
+    }
+
+    fn get_tx_status_internal(
+        wallet: &bdk::Wallet<Tree>,
+        txid: Txid,
+        tip: u32,
+    ) -> LipaResult<TxStatus> {
         let include_raw = false;
         let tx = wallet
-            .get_tx(&tx_id, include_raw)
+            .get_tx(&txid, include_raw)
             .map_to_runtime_error(ElectrumServiceUnavailable, "Failed to get tx status")?;
 
         let status = match tx {
@@ -186,7 +216,6 @@ impl Wallet {
             Some(tx) => match tx.confirmation_time {
                 None => TxStatus::InMempool,
                 Some(block_time) => {
-                    let tip = self.get_tip()?;
                     debug_assert!(tip >= block_time.height);
                     let number_of_blocks = 1 + tip - block_time.height;
                     TxStatus::Confirmed { number_of_blocks }

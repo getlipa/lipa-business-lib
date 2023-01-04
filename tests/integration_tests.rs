@@ -128,16 +128,22 @@ mod nigiri_tests {
 
         let our_addr = wallet.get_addr().unwrap();
 
-        let tx_id = nigiri::fund_address(0.1, &our_addr).unwrap();
-        nigiri::wait_for_electrum_to_see_tx(&tx_id);
+        let tx_id_confirmed1 = nigiri::fund_address(0.1, &our_addr).unwrap();
+        let tx_id_confirmed2 = nigiri::fund_address(0.1, &our_addr).unwrap();
+        let tx_id_unconfirmed1 = nigiri::fund_address_without_conf(0.05, &our_addr).unwrap();
+        let tx_id_unconfirmed2 = nigiri::fund_address_without_conf(0.05, &our_addr).unwrap();
+        nigiri::wait_for_electrum_to_see_tx(&tx_id_confirmed1);
+        nigiri::wait_for_electrum_to_see_tx(&tx_id_confirmed2);
+        nigiri::wait_for_electrum_to_see_tx(&tx_id_unconfirmed1);
+        nigiri::wait_for_electrum_to_see_tx(&tx_id_unconfirmed2);
 
         assert_eq!(
             wallet.sync_balance().unwrap(),
             Balance {
                 immature: 0,
                 trusted_pending: 0,
-                untrusted_pending: 0,
-                confirmed: 10_000_000,
+                untrusted_pending: 10_000_000,
+                confirmed: 20_000_000,
             }
         );
 
@@ -145,7 +151,7 @@ mod nigiri_tests {
             .prepare_drain_tx(REGTEST_TARGET_ADDR.to_string(), 1)
             .unwrap();
 
-        assert_eq!(drain_tx.output_sat + drain_tx.on_chain_fee_sat, 10_000_000);
+        assert_eq!(drain_tx.output_sat + drain_tx.on_chain_fee_sat, 20_000_000);
 
         let psbt = deserialize::<Psbt>(&drain_tx.blob).unwrap();
 
@@ -175,7 +181,7 @@ mod nigiri_tests {
             Balance {
                 immature: 0,
                 trusted_pending: 0,
-                untrusted_pending: 0,
+                untrusted_pending: 10_000_000,
                 confirmed: 0
             }
         );
@@ -187,6 +193,16 @@ mod nigiri_tests {
 
         nigiri::mine_blocks(1).unwrap();
         sleep(Duration::from_secs(5));
+
+        assert_eq!(
+            wallet.sync_balance().unwrap(),
+            Balance {
+                immature: 0,
+                trusted_pending: 0,
+                untrusted_pending: 0,
+                confirmed: 10_000_000
+            }
+        );
 
         assert_eq!(
             wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
