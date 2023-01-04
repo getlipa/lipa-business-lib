@@ -1,14 +1,11 @@
 use crate::errors::{invalid_input, permanent_failure, runtime_error, LipaResult, MapToLipaError};
 use crate::RuntimeErrorCode;
-use crate::RuntimeErrorCode::{
-    ElectrumServiceUnavailable, GenericError, NotEnoughFunds, RemoteServiceUnavailable,
-};
 use bdk::bitcoin::consensus::deserialize;
 use bdk::bitcoin::consensus::serialize;
 use bdk::bitcoin::psbt::Psbt;
 use bdk::bitcoin::{Address, Network, OutPoint, Txid};
-use bdk::blockchain::{Blockchain, ElectrumBlockchain, GetHeight};
-use bdk::database::MemoryDatabase;
+use bdk::blockchain::{Blockchain, ElectrumBlockchain};
+use bdk::database::{Database, MemoryDatabase};
 use bdk::electrum_client::Client;
 use bdk::sled::Tree;
 use bdk::wallet::AddressIndex;
@@ -52,7 +49,7 @@ pub enum AddressValidationResult {
 impl Wallet {
     pub fn new(config: Config) -> LipaResult<Self> {
         let client = Client::new(&config.electrum_url).map_to_runtime_error(
-            RemoteServiceUnavailable,
+            RuntimeErrorCode::RemoteServiceUnavailable,
             "Failed to create an electrum client",
         )?;
         let blockchain = ElectrumBlockchain::from(client);
@@ -106,24 +103,23 @@ impl Wallet {
 
         self.sync()?;
 
-        let wallet = self.wallet.lock().unwrap();
-
         let fee_rate = self
             .blockchain
             .estimate_fee(confirm_in_blocks as usize)
             .map_to_runtime_error(
-                ElectrumServiceUnavailable,
+                RuntimeErrorCode::ElectrumServiceUnavailable,
                 "Failed to estimate fee for drain tx",
             )?;
 
-        let tip = self.get_tip()?;
-
         let mut confirmed_utxo_outpoints: Vec<OutPoint> = Vec::new();
 
-        for utxo in wallet.list_unspent().map_to_runtime_error(
-            RuntimeErrorCode::NotEnoughFunds,
-            "No unspent UTXOs have been found",
-        )? {
+        let tip = self.get_sync_height()?;
+        let wallet = self.wallet.lock().unwrap();
+
+        for utxo in wallet
+            .list_unspent()
+            .map_to_permanent_failure("Failed to list UTXOs")?
+        {
             let txid = utxo.outpoint.txid;
             match Self::get_tx_status_internal(&wallet, txid, tip)? {
                 TxStatus::NotInMempool => {}
@@ -146,7 +142,7 @@ impl Wallet {
 
         let (psbt, tx_details) = tx_builder
             .finish()
-            .map_to_runtime_error(NotEnoughFunds, "Failed to create PSBT")?;
+            .map_to_runtime_error(RuntimeErrorCode::NotEnoughFunds, "Failed to create PSBT")?;
 
         let fee = match tx_details.fee {
             None => return Err(permanent_failure("Empty fee using an Electrum backend")),
@@ -187,7 +183,10 @@ impl Wallet {
 
         self.blockchain
             .broadcast(&psbt.extract_tx())
-            .map_to_runtime_error(ElectrumServiceUnavailable, "Failed to broadcast tx")
+            .map_to_runtime_error(
+                RuntimeErrorCode::ElectrumServiceUnavailable,
+                "Failed to broadcast tx",
+            )
     }
 
     pub fn get_tx_status(&self, txid: String) -> LipaResult<TxStatus> {
@@ -195,9 +194,8 @@ impl Wallet {
 
         self.sync()?;
 
+        let tip = self.get_sync_height()?;
         let wallet = self.wallet.lock().unwrap();
-
-        let tip = self.get_tip()?;
         Self::get_tx_status_internal(&wallet, txid, tip)
     }
 
@@ -209,7 +207,7 @@ impl Wallet {
         let include_raw = false;
         let tx = wallet
             .get_tx(&txid, include_raw)
-            .map_to_runtime_error(ElectrumServiceUnavailable, "Failed to get tx status")?;
+            .map_to_permanent_failure("Failed to get tx from the wallet")?;
 
         let status = match tx {
             None => TxStatus::NotInMempool,
@@ -238,10 +236,14 @@ impl Wallet {
         Ok(address.to_string())
     }
 
-    fn get_tip(&self) -> LipaResult<u32> {
-        self.blockchain
-            .get_height()
-            .map_to_runtime_error(ElectrumServiceUnavailable, "Failed to query tip")
+    fn get_sync_height(&self) -> LipaResult<u32> {
+        let wallet = self.wallet.lock().unwrap();
+        let sync_time = wallet
+            .database()
+            .get_sync_time()
+            .map_to_permanent_failure("Failed to get sync time")?
+            .ok_or_else(|| permanent_failure("Sync time is empty for synced wallet"))?;
+        Ok(sync_time.block_time.height)
     }
 
     fn sync(&self) -> LipaResult<()> {
@@ -250,9 +252,14 @@ impl Wallet {
             .unwrap()
             .sync(&self.blockchain, SyncOptions::default())
             .map_err(|e| match e {
-                Error::Electrum(_) => runtime_error(ElectrumServiceUnavailable, e),
+                Error::Electrum(_) => {
+                    runtime_error(RuntimeErrorCode::ElectrumServiceUnavailable, e)
+                }
                 Error::Sled(e) => permanent_failure(e),
-                _ => runtime_error(GenericError, "Failed to sync the BDK wallet"),
+                _ => runtime_error(
+                    RuntimeErrorCode::GenericError,
+                    "Failed to sync the BDK wallet",
+                ),
             })
     }
 }
