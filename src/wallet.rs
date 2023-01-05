@@ -101,7 +101,7 @@ impl Wallet {
             ));
         }
 
-        self.sync()?;
+        let tip_height = self.sync()?;
 
         let fee_rate = self
             .blockchain
@@ -113,7 +113,6 @@ impl Wallet {
 
         let mut confirmed_utxo_outpoints: Vec<OutPoint> = Vec::new();
 
-        let tip = self.get_sync_height()?;
         let wallet = self.wallet.lock().unwrap();
 
         for utxo in wallet
@@ -121,7 +120,7 @@ impl Wallet {
             .map_to_permanent_failure("Failed to list UTXOs")?
         {
             let txid = utxo.outpoint.txid;
-            match Self::get_tx_status_internal(&wallet, txid, tip)? {
+            match Self::get_tx_status_internal(&wallet, txid, tip_height)? {
                 TxStatus::NotInMempool => {}
                 TxStatus::InMempool => {}
                 TxStatus::Confirmed { .. } => {
@@ -192,11 +191,10 @@ impl Wallet {
     pub fn get_tx_status(&self, txid: String) -> LipaResult<TxStatus> {
         let txid = Txid::from_str(&txid).map_to_invalid_input("Invalid tx id")?;
 
-        self.sync()?;
+        let tip_height = self.sync()?;
 
-        let tip = self.get_sync_height()?;
         let wallet = self.wallet.lock().unwrap();
-        Self::get_tx_status_internal(&wallet, txid, tip)
+        Self::get_tx_status_internal(&wallet, txid, tip_height)
     }
 
     fn get_tx_status_internal(
@@ -236,20 +234,9 @@ impl Wallet {
         Ok(address.to_string())
     }
 
-    fn get_sync_height(&self) -> LipaResult<u32> {
+    fn sync(&self) -> LipaResult<u32> {
         let wallet = self.wallet.lock().unwrap();
-        let sync_time = wallet
-            .database()
-            .get_sync_time()
-            .map_to_permanent_failure("Failed to get sync time")?
-            .ok_or_else(|| permanent_failure("Sync time is empty for synced wallet"))?;
-        Ok(sync_time.block_time.height)
-    }
-
-    fn sync(&self) -> LipaResult<()> {
-        self.wallet
-            .lock()
-            .unwrap()
+        wallet
             .sync(&self.blockchain, SyncOptions::default())
             .map_err(|e| match e {
                 Error::Electrum(_) => {
@@ -260,7 +247,13 @@ impl Wallet {
                     RuntimeErrorCode::GenericError,
                     "Failed to sync the BDK wallet",
                 ),
-            })
+            })?;
+        let sync_time = wallet
+            .database()
+            .get_sync_time()
+            .map_to_permanent_failure("Failed to get sync time")?
+            .ok_or_else(|| permanent_failure("Sync time is empty for synced wallet"))?;
+        Ok(sync_time.block_time.height)
     }
 }
 
