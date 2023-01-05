@@ -60,8 +60,13 @@ impl Wallet {
             .open_tree("bdk-wallet-database")
             .map_to_permanent_failure("Failed to open sled database tree")?;
 
-        let wallet = bdk::Wallet::new(&config.watch_descriptor, None, config.network, db_tree)
-            .map_to_permanent_failure("Failed to create wallet")?;
+        let wallet = bdk::Wallet::new(
+            &config.watch_descriptor,
+            Some(&config.watch_descriptor.replace("/0/*)", "/1/*)")),
+            config.network,
+            db_tree,
+        )
+        .map_to_permanent_failure("Failed to create wallet")?;
         let wallet = Arc::new(Mutex::new(wallet));
 
         Ok(Self { blockchain, wallet })
@@ -167,7 +172,7 @@ impl Wallet {
 
         let wallet = bdk::Wallet::new(
             &spend_descriptor,
-            None,
+            Some(&spend_descriptor.replace("/0/*)", "/1/*)")),
             self.wallet.lock().unwrap().network(),
             MemoryDatabase::new(),
         )
