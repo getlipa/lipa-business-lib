@@ -60,8 +60,15 @@ impl Wallet {
             .open_tree("bdk-wallet-database")
             .map_to_permanent_failure("Failed to open sled database tree")?;
 
-        let wallet = bdk::Wallet::new(&config.watch_descriptor, None, config.network, db_tree)
-            .map_to_permanent_failure("Failed to create wallet")?;
+        let wallet = bdk::Wallet::new(
+            &config.watch_descriptor,
+            Some(&get_change_descriptor_from_descriptor(
+                &config.watch_descriptor,
+            )?),
+            config.network,
+            db_tree,
+        )
+        .map_to_permanent_failure("Failed to create wallet")?;
         let wallet = Arc::new(Mutex::new(wallet));
 
         Ok(Self { blockchain, wallet })
@@ -167,7 +174,7 @@ impl Wallet {
 
         let wallet = bdk::Wallet::new(
             &spend_descriptor,
-            None,
+            Some(&get_change_descriptor_from_descriptor(&spend_descriptor)?),
             self.wallet.lock().unwrap().network(),
             MemoryDatabase::new(),
         )
@@ -257,16 +264,35 @@ impl Wallet {
     }
 }
 
+fn get_change_descriptor_from_descriptor(descriptor: &str) -> LipaResult<String> {
+    if !descriptor.ends_with("0/*)") {
+        return Err(invalid_input(
+            "Invalid descriptor: Descriptor doesn't end with \"0/*)\". Could it already be a change descriptor?",
+        ));
+    }
+
+    if descriptor.match_indices("0/*)").count() > 1 {
+        return Err(invalid_input(
+            "Invalid descriptor: Descriptor has multiple occurrences of substring \"0/*)\"",
+        ));
+    }
+
+    Ok(descriptor.replacen("0/*)", "1/*)", 1))
+}
+
 #[cfg(test)]
 pub mod test {
+    use crate::wallet::get_change_descriptor_from_descriptor;
     use crate::{AddressValidationResult, Config, Wallet};
     use bdk::bitcoin::{Address, AddressType, Network};
     use std::fs::remove_dir_all;
     use std::str::FromStr;
 
     const MAINNET_WATCH_DESCRIPTOR: &str = "wpkh([ddd71d79/84'/0'/0']xpub6Cg6Y9ynKKSjZ1EwscvwerJMU1PPPcdhjr2tQ783zE31NUfAF1EMY4qiEBfKkExF3eBruUiSpGZLeCaFiJZSeh3HzAjNANx3TT8QxdN8GUd/0/*)";
+    const MAINNET_WATCH_DESCRIPTOR_CHANGE: &str = "wpkh([ddd71d79/84'/0'/0']xpub6Cg6Y9ynKKSjZ1EwscvwerJMU1PPPcdhjr2tQ783zE31NUfAF1EMY4qiEBfKkExF3eBruUiSpGZLeCaFiJZSeh3HzAjNANx3TT8QxdN8GUd/1/*)";
 
     const TESTNET_WATCH_DESCRIPTOR: &str = "wpkh([aed2a027/84'/1'/0']tpubDCvyR4gGk5U6r1Q1HMQtgZYMD3a9bVyt7Tv9BWgcBCQsff4aqR7arUGPTMaUbVwaH8TeaK924GJr9nHyGPBtqSCD8BCjMnJb1qZFjK4ACfL/0/*)";
+    const TESTNET_WATCH_DESCRIPTOR_CHANGE: &str = "wpkh([aed2a027/84'/1'/0']tpubDCvyR4gGk5U6r1Q1HMQtgZYMD3a9bVyt7Tv9BWgcBCQsff4aqR7arUGPTMaUbVwaH8TeaK924GJr9nHyGPBtqSCD8BCjMnJb1qZFjK4ACfL/1/*)";
 
     const MAINNET_P2PKH_ADDR: &str = "151111ZKuNi4r9Ker4PjTMR1hf9TdwKe6W";
     const MAINNET_P2SH_ADDR: &str = "351112e6qVY9zzZ5HZGxhcYnX975AVzYxt";
@@ -431,5 +457,30 @@ pub mod test {
         let addr_2 = wallet.get_addr().unwrap();
 
         assert_ne!(addr, addr_2);
+    }
+
+    const INVALID_WATCH_DESCRIPTOR: &str = "wpkh([aed2a027/84'/1'/0']tpubDCvyR4gGk5U6r1Q1HMQtgZYMD3a9bVyt7Tv9BWgcBCQsff4aqR7arUGPTMaUbVwaH/0/*)K924GJr9nHyGPBtqSCD8BCjMnJb1qZFjK4ACfL/0/*)";
+
+    #[test]
+    fn test_get_change_descriptor_from_descriptor() {
+        assert_eq!(
+            MAINNET_WATCH_DESCRIPTOR_CHANGE,
+            get_change_descriptor_from_descriptor(MAINNET_WATCH_DESCRIPTOR).unwrap()
+        );
+
+        assert_eq!(
+            TESTNET_WATCH_DESCRIPTOR_CHANGE,
+            get_change_descriptor_from_descriptor(TESTNET_WATCH_DESCRIPTOR).unwrap()
+        );
+
+        let result = get_change_descriptor_from_descriptor(MAINNET_WATCH_DESCRIPTOR_CHANGE);
+        assert!(result.is_err());
+        assert!(result.err().unwrap().to_string().contains("Invalid descriptor: Descriptor doesn't end with \"0/*)\". Could it already be a change descriptor?"));
+
+        let result = get_change_descriptor_from_descriptor(INVALID_WATCH_DESCRIPTOR);
+        assert!(result.is_err());
+        assert!(result.err().unwrap().to_string().contains(
+            "Invalid descriptor: Descriptor has multiple occurrences of substring \"0/*)\""
+        ));
     }
 }
