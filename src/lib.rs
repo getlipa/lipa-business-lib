@@ -10,7 +10,7 @@ pub use crate::secrets::{
     derive_keys, generate_keypair, generate_mnemonic, Descriptors, KeyPair, WalletKeys,
 };
 pub use crate::signing::sign;
-pub use crate::wallet::{AddressValidationResult, Config, Tx, TxStatus, Wallet};
+pub use crate::wallet::{AddressValidationResult, Config, Tx, TxDetails, TxStatus, Wallet};
 
 use bdk::bitcoin::Network;
 use bdk::Balance;

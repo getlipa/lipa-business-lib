@@ -13,6 +13,7 @@ use bdk::{Balance, Error, SignOptions, SyncOptions};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
 
 pub struct Config {
     pub electrum_url: String,
@@ -37,7 +38,18 @@ pub struct Tx {
 pub enum TxStatus {
     NotInMempool,
     InMempool,
-    Confirmed { number_of_blocks: u32 },
+    Confirmed {
+        number_of_blocks: u32,
+        confirmed_at: SystemTime,
+    },
+}
+
+pub struct TxDetails {
+    pub id: String,
+    pub output_address: String,
+    pub output_sat: u64,
+    pub on_chain_fee_sat: u64,
+    pub status: TxStatus,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -97,6 +109,10 @@ impl Wallet {
         } else {
             AddressValidationResult::Invalid
         }
+    }
+
+    pub fn is_drain_tx_affordable(&self, _confirm_in_blocks: u32) -> LipaResult<bool> {
+        todo!();
     }
 
     pub fn prepare_drain_tx(&self, addr: String, confirm_in_blocks: u32) -> LipaResult<Tx> {
@@ -204,6 +220,10 @@ impl Wallet {
         Self::get_tx_status_internal(&wallet, txid, tip_height)
     }
 
+    pub fn get_spending_txs(&self) -> LipaResult<Vec<TxDetails>> {
+        todo!();
+    }
+
     fn get_tx_status_internal(
         wallet: &bdk::Wallet<Tree>,
         txid: Txid,
@@ -221,7 +241,12 @@ impl Wallet {
                 Some(block_time) => {
                     debug_assert!(tip >= block_time.height);
                     let number_of_blocks = 1 + tip - block_time.height;
-                    TxStatus::Confirmed { number_of_blocks }
+                    let confirmed_at =
+                        SystemTime::UNIX_EPOCH + Duration::from_secs(block_time.timestamp);
+                    TxStatus::Confirmed {
+                        number_of_blocks,
+                        confirmed_at,
+                    }
                 }
             },
         };

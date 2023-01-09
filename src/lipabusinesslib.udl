@@ -137,12 +137,24 @@ interface Wallet {
     // Returns the status of a tx given its tx id.
     [Throws=LipaError]
     TxStatus get_tx_status(string txid);
+
+    // Returns a list of all txs that have been sent out from the local wallet
+    [Throws=LipaError]
+    sequence<TxDetails> get_spending_txs();
+
+    // Return true if the local wallet has enough funds for prepare_drain_tx() to be successful
+    //
+    // Parameters:
+    // * confirm_in_blocks - the target number of blocks used to estimate the on-chain fee. The value that will be
+    //      provided later to prepare_drain_tx() should be the same.
+    [Throws=LipaError]
+    boolean is_drain_tx_affordable(u32 confirm_in_blocks);
 };
 
 // A Bitcoin tx
 //
 // Fields:
-// * id - confirmed balance
+// * id - the txid
 // * blob - the serialized tx (PSBT)
 // * on_chain_fee_sat - on-chain fees included in the tx (denominated in sats)
 // * output_sat - amount of bitcoin to be transferred (denominated in sats)
@@ -164,12 +176,29 @@ dictionary Tx {
 //      avoid using low fees.
 // * InMempool - the tx has 0 confirmations
 // * Confirmed - the tx has at least 1 confirmation. The exact number of confirmations is provided (number_of_blocks)
-//      and it's commonly accepted that 6 confirmations isn't reversible
+//      and it's commonly accepted that 6 confirmations isn't reversible. The timestamp (confirmed_at) of confirmation
+//      is also provided.
 [Enum]
 interface TxStatus {
     NotInMempool();
     InMempool();
-    Confirmed(u32 number_of_blocks);
+    Confirmed(u32 number_of_blocks, timestamp confirmed_at);
+};
+
+// Details about a tx
+//
+// Fields:
+// * id - the txid
+// * output_address - the address to which funds have been/will be transferred
+// * output_sat - amount of bitcoin to be transferred (denominated in sats)
+// * on_chain_fee_sat - on-chain fees included in the tx (denominated in sats)
+// * status - the TxStatus of the tx
+dictionary TxDetails {
+    string id;
+    string output_address;
+    u64 output_sat;
+    u64 on_chain_fee_sat;
+    TxStatus status;
 };
 
 namespace lipabusinesslib {
