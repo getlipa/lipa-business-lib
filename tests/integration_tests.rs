@@ -104,7 +104,7 @@ mod nigiri_tests {
     use std::fs::remove_dir_all;
     use std::str::FromStr;
     use std::thread::sleep;
-    use std::time::Duration;
+    use std::time::{Duration, SystemTime};
     use uniffi_lipabusinesslib::{Config, TxStatus, Wallet};
 
     const REGTEST_WATCH_DESCRIPTOR: &str = "wpkh([aeaaaa34/84'/1'/0']tpubDD9QqCT2Y9P3BV7o8a8ajDqHmwWq5XAHKsunr9vjGVYKiRdFQqqC9wuq7jgKdUi8YesiTHiAkNurq7mx7dLDGRCxY4v8fbSa8ZS53MxLrP2/0/*)";
@@ -204,12 +204,24 @@ mod nigiri_tests {
             }
         );
 
-        assert_eq!(
-            wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
+        let tx_status_after_1_conf = wallet.get_tx_status(drain_tx.id.clone()).unwrap();
+        assert!(matches!(
+            tx_status_after_1_conf,
             TxStatus::Confirmed {
-                number_of_blocks: 1
+                number_of_blocks: 1,
+                confirmed_at: _,
             }
-        );
+        ));
+
+        let confirmed_at_after_1_conf =
+            if let TxStatus::Confirmed { confirmed_at, .. } = tx_status_after_1_conf {
+                confirmed_at
+            } else {
+                panic!();
+            };
+        // Confirm that confirmed_at is somewhere in the past 5 minutes
+        assert!(SystemTime::now() > confirmed_at_after_1_conf);
+        assert!(SystemTime::now() - Duration::from_secs(300) < confirmed_at_after_1_conf);
 
         nigiri::mine_blocks(1).unwrap();
         sleep(Duration::from_secs(5));
@@ -217,7 +229,8 @@ mod nigiri_tests {
         assert_eq!(
             wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
             TxStatus::Confirmed {
-                number_of_blocks: 2
+                number_of_blocks: 2,
+                confirmed_at: confirmed_at_after_1_conf,
             }
         );
 
@@ -227,7 +240,8 @@ mod nigiri_tests {
         assert_eq!(
             wallet.get_tx_status(drain_tx.id).unwrap(),
             TxStatus::Confirmed {
-                number_of_blocks: 12
+                number_of_blocks: 12,
+                confirmed_at: confirmed_at_after_1_conf
             }
         );
     }

@@ -12,7 +12,7 @@ nigiri = ["simplelog"]
 
 [dependencies]
 uniffi = "0.21.0"
-thiserror = "1.0.36"
+thiserror = "1.0.38"
 log = "0.4.17"
 bdk = { version = "0.26.0", features = ["keys-bip39"] }
 rand = "0.8.5"
