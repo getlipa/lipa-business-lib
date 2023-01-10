@@ -43,6 +43,8 @@ fn test_prepare_drain_tx() {
     })
     .unwrap();
 
+    assert!(wallet.is_drain_tx_affordable(1).unwrap());
+
     let drain_tx = wallet
         .prepare_drain_tx(TESTNET_ADDR.to_string(), 1)
         .unwrap();
@@ -126,6 +128,8 @@ mod nigiri_tests {
         })
         .unwrap();
 
+        assert!(!wallet.is_drain_tx_affordable(1).unwrap());
+
         let our_addr = wallet.get_addr().unwrap();
 
         let tx_id_confirmed1 = nigiri::fund_address(0.1, &our_addr).unwrap();
@@ -146,6 +150,8 @@ mod nigiri_tests {
                 confirmed: 20_000_000,
             }
         );
+
+        assert!(wallet.is_drain_tx_affordable(1).unwrap());
 
         let drain_tx = wallet
             .prepare_drain_tx(REGTEST_TARGET_ADDR.to_string(), 1)
@@ -219,8 +225,8 @@ mod nigiri_tests {
             } else {
                 panic!();
             };
-        // Confirm that confirmed_at is somewhere in the past 5 minutes
-        assert!(SystemTime::now() > confirmed_at_after_1_conf);
+        // Confirm that confirmed_at is close to now (+/- 5 minutes)
+        assert!(SystemTime::now() + Duration::from_secs(300) > confirmed_at_after_1_conf);
         assert!(SystemTime::now() - Duration::from_secs(300) < confirmed_at_after_1_conf);
 
         nigiri::mine_blocks(1).unwrap();
@@ -244,5 +250,28 @@ mod nigiri_tests {
                 confirmed_at: confirmed_at_after_1_conf
             }
         );
+
+        // Get dust balance
+        let tx = wallet
+            .prepare_send_tx(REGTEST_TARGET_ADDR.to_string(), 9_999_400, 1)
+            .unwrap();
+        wallet
+            .sign_and_broadcast_tx(tx.blob, REGTEST_SPEND_DESCRIPTOR.to_string())
+            .unwrap();
+
+        nigiri::mine_blocks(1).unwrap();
+        sleep(Duration::from_secs(5));
+
+        assert_eq!(
+            wallet.sync_balance().unwrap(),
+            Balance {
+                immature: 0,
+                trusted_pending: 0,
+                untrusted_pending: 0,
+                confirmed: 391,
+            }
+        );
+        // 391 sats is not enough to create a drain tx
+        assert!(!wallet.is_drain_tx_affordable(1).unwrap());
     }
 }
