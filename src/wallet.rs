@@ -1,9 +1,10 @@
 use crate::errors::{invalid_input, permanent_failure, runtime_error, LipaResult, MapToLipaError};
-use crate::RuntimeErrorCode;
+use crate::{LipaError, RuntimeErrorCode};
 use bdk::bitcoin::consensus::deserialize;
 use bdk::bitcoin::consensus::serialize;
+use bdk::bitcoin::hashes::sha256::Hash;
 use bdk::bitcoin::psbt::Psbt;
-use bdk::bitcoin::{Address, Network, OutPoint, Txid};
+use bdk::bitcoin::{Address, Network, OutPoint, Script, Txid, WScriptHash};
 use bdk::blockchain::{Blockchain, ElectrumBlockchain};
 use bdk::database::{Database, MemoryDatabase};
 use bdk::electrum_client::Client;
@@ -111,9 +112,33 @@ impl Wallet {
         }
     }
 
-    pub fn is_drain_tx_affordable(&self, _confirm_in_blocks: u32) -> LipaResult<bool> {
-        // TODO: actual implementation
-        Ok(true)
+    // To know if the local wallet has enough funds to create a drain tx, the most accurate
+    // option is to actually try to prepare a drain tx.
+    //
+    // The main issue is that the goal is to know if a drain tx is affordable before knowing to
+    // which address we want to drain to. For this reason, we try to prepare a drain tx
+    // that spends to a burner address.
+    //
+    // We are careful about dropping the prepared tx asap, as we don't want this tx to ever be signed.
+    pub fn is_drain_tx_affordable(&self, confirm_in_blocks: u32) -> LipaResult<bool> {
+        let burner_address = { Self::get_burner_address(self.wallet.lock().unwrap().network())? };
+
+        match self.prepare_drain_tx(burner_address, confirm_in_blocks) {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                if matches!(
+                    e,
+                    LipaError::RuntimeError {
+                        code: RuntimeErrorCode::NotEnoughFunds,
+                        ..
+                    }
+                ) {
+                    Ok(false)
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 
     pub fn prepare_drain_tx(&self, addr: String, confirm_in_blocks: u32) -> LipaResult<Tx> {
@@ -135,23 +160,9 @@ impl Wallet {
                 "Failed to estimate fee for drain tx",
             )?;
 
-        let mut confirmed_utxo_outpoints: Vec<OutPoint> = Vec::new();
-
         let wallet = self.wallet.lock().unwrap();
 
-        for utxo in wallet
-            .list_unspent()
-            .map_to_permanent_failure("Failed to list UTXOs")?
-        {
-            let txid = utxo.outpoint.txid;
-            match Self::get_tx_status_internal(&wallet, txid, tip_height)? {
-                TxStatus::NotInMempool => {}
-                TxStatus::InMempool => {}
-                TxStatus::Confirmed { .. } => {
-                    confirmed_utxo_outpoints.push(utxo.outpoint);
-                }
-            }
-        }
+        let confirmed_utxo_outpoints = Self::get_confirmed_utxo_outpoints(&wallet, tip_height)?;
 
         let mut tx_builder = wallet.build_tx();
 
@@ -195,7 +206,7 @@ impl Wallet {
             self.wallet.lock().unwrap().network(),
             MemoryDatabase::new(),
         )
-        .unwrap();
+        .map_to_permanent_failure("Failed to create signing-capable wallet")?;
 
         let is_finalized = wallet
             .sign(&mut psbt, SignOptions::default())
@@ -255,6 +266,72 @@ impl Wallet {
         ])
     }
 
+    pub fn get_addr(&self) -> LipaResult<String> {
+        self.sync()?;
+
+        let wallet = self.wallet.lock().unwrap();
+
+        let address = wallet
+            .get_address(AddressIndex::New)
+            .map_to_permanent_failure("Failed to get address from local BDK wallet")?
+            .address;
+
+        Ok(address.to_string())
+    }
+
+    // Not stated in the UDL file -> at the moment is just used in tests
+    pub fn prepare_tx(&self, addr: String, amount: u64, confirm_in_blocks: u32) -> LipaResult<Tx> {
+        let address = Address::from_str(&addr).map_to_invalid_input("Invalid bitcoin address")?;
+
+        if !(1..=25).contains(&confirm_in_blocks) {
+            return Err(invalid_input(
+                "Invalid block confirmation target. Please use a target in the range [1; 25]",
+            ));
+        }
+
+        let tip_height = self.sync()?;
+
+        let fee_rate = self
+            .blockchain
+            .estimate_fee(confirm_in_blocks as usize)
+            .map_to_runtime_error(
+                RuntimeErrorCode::ElectrumServiceUnavailable,
+                "Failed to estimate fee for drain tx",
+            )?;
+
+        let wallet = self.wallet.lock().unwrap();
+
+        let confirmed_utxo_outpoints = Self::get_confirmed_utxo_outpoints(&wallet, tip_height)?;
+
+        let mut tx_builder = wallet.build_tx();
+
+        tx_builder
+            .add_utxos(&confirmed_utxo_outpoints)
+            .map_to_permanent_failure("Failed to add utxos to tx builder")?
+            .manually_selected_only()
+            .add_recipient(address.script_pubkey(), amount)
+            .fee_rate(fee_rate)
+            .enable_rbf();
+
+        let (psbt, tx_details) = tx_builder
+            .finish()
+            .map_to_runtime_error(RuntimeErrorCode::NotEnoughFunds, "Failed to create PSBT")?;
+
+        let fee = match tx_details.fee {
+            None => return Err(permanent_failure("Empty fee using an Electrum backend")),
+            Some(f) => f,
+        };
+
+        let tx = Tx {
+            id: tx_details.txid.to_string(),
+            blob: serialize(&psbt),
+            on_chain_fee_sat: fee,
+            output_sat: tx_details.sent - fee,
+        };
+
+        Ok(tx)
+    }
+
     fn get_tx_status_internal(
         wallet: &bdk::Wallet<Tree>,
         txid: Txid,
@@ -284,19 +361,6 @@ impl Wallet {
         Ok(status)
     }
 
-    pub fn get_addr(&self) -> LipaResult<String> {
-        self.sync()?;
-
-        let wallet = self.wallet.lock().unwrap();
-
-        let address = wallet
-            .get_address(AddressIndex::New)
-            .map_to_permanent_failure("Failed to get address from local BDK wallet")?
-            .address;
-
-        Ok(address.to_string())
-    }
-
     fn sync(&self) -> LipaResult<u32> {
         let wallet = self.wallet.lock().unwrap();
         wallet
@@ -317,6 +381,49 @@ impl Wallet {
             .map_to_permanent_failure("Failed to get sync time")?
             .ok_or_else(|| permanent_failure("Sync time is empty for synced wallet"))?;
         Ok(sync_time.block_time.height)
+    }
+
+    fn get_burner_address(network: Network) -> LipaResult<String> {
+        // The following invalid script hash can be obtained from the string "getlipa.com"
+        // SHA-256( "getlipa.com" ) = 0x81d109c67004de69c38178d44681baa943756810f2e5e0e94441da3fd19595e3
+        // Computed using: https://md5calc.com/hash/sha256/getlipa.com
+        let invalid_script_hash = WScriptHash::from_hash(
+            Hash::from_str("81d109c67004de69c38178d44681baa943756810f2e5e0e94441da3fd19595e3")
+                .map_to_permanent_failure("Failed to parse hardcoded script hash")?,
+        );
+
+        // Get a p2wsh address as it provides a worst case scenario regarding final tx size
+        // (p2tr would also result in the same tx size)
+        // Drain tx sizes with a single input utxo:
+        //      p2pkh 415 - p2sh 413 - p2wsh 424 - p2wpkh 412 - p2tr 424
+        let invalid_script = Script::new_v0_p2wsh(&invalid_script_hash);
+
+        Ok(Address::from_script(&invalid_script, network)
+            .map_to_permanent_failure("Failed to get burner address from hardcoded script hash")?
+            .to_string())
+    }
+
+    fn get_confirmed_utxo_outpoints(
+        wallet: &bdk::Wallet<Tree>,
+        tip_height: u32,
+    ) -> LipaResult<Vec<OutPoint>> {
+        let mut confirmed_utxo_outpoints: Vec<OutPoint> = Vec::new();
+
+        for utxo in wallet
+            .list_unspent()
+            .map_to_permanent_failure("Failed to list UTXOs")?
+        {
+            let txid = utxo.outpoint.txid;
+            match Self::get_tx_status_internal(wallet, txid, tip_height)? {
+                TxStatus::NotInMempool => {}
+                TxStatus::InMempool => {}
+                TxStatus::Confirmed { .. } => {
+                    confirmed_utxo_outpoints.push(utxo.outpoint);
+                }
+            }
+        }
+
+        Ok(confirmed_utxo_outpoints)
     }
 }
 
