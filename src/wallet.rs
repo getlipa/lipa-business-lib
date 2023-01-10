@@ -134,19 +134,11 @@ impl Wallet {
 
         match self.prepare_drain_tx(local_address, confirm_in_blocks) {
             Ok(_) => Ok(true),
-            Err(e) => {
-                if matches!(
-                    e,
-                    LipaError::RuntimeError {
-                        code: RuntimeErrorCode::NotEnoughFunds,
-                        ..
-                    }
-                ) {
-                    Ok(false)
-                } else {
-                    Err(e)
-                }
-            }
+            Err(LipaError::RuntimeError {
+                code: RuntimeErrorCode::NotEnoughFunds,
+                ..
+            }) => Ok(false),
+            Err(e) => Err(e),
         }
     }
 
@@ -290,7 +282,12 @@ impl Wallet {
     }
 
     // Not stated in the UDL file -> at the moment is just used in tests
-    pub fn prepare_tx(&self, addr: String, amount: u64, confirm_in_blocks: u32) -> LipaResult<Tx> {
+    pub fn prepare_send_tx(
+        &self,
+        addr: String,
+        amount: u64,
+        confirm_in_blocks: u32,
+    ) -> LipaResult<Tx> {
         let address = Address::from_str(&addr).map_to_invalid_input("Invalid bitcoin address")?;
 
         if !(1..=25).contains(&confirm_in_blocks) {
@@ -306,7 +303,7 @@ impl Wallet {
             .estimate_fee(confirm_in_blocks as usize)
             .map_to_runtime_error(
                 RuntimeErrorCode::ElectrumServiceUnavailable,
-                "Failed to estimate fee for drain tx",
+                "Failed to estimate fee for send tx",
             )?;
 
         let wallet = self.wallet.lock().unwrap();

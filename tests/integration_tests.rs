@@ -253,7 +253,7 @@ mod nigiri_tests {
 
         // Get dust balance
         let tx = wallet
-            .prepare_tx(REGTEST_TARGET_ADDR.to_string(), 9_999_400, 1)
+            .prepare_send_tx(REGTEST_TARGET_ADDR.to_string(), 9_999_400, 1)
             .unwrap();
         wallet
             .sign_and_broadcast_tx(tx.blob, REGTEST_SPEND_DESCRIPTOR.to_string())
