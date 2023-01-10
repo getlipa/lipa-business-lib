@@ -112,7 +112,8 @@ impl Wallet {
     }
 
     pub fn is_drain_tx_affordable(&self, _confirm_in_blocks: u32) -> LipaResult<bool> {
-        todo!();
+        // TODO: actual implementation
+        Ok(true)
     }
 
     pub fn prepare_drain_tx(&self, addr: String, confirm_in_blocks: u32) -> LipaResult<Tx> {
@@ -221,7 +222,37 @@ impl Wallet {
     }
 
     pub fn get_spending_txs(&self) -> LipaResult<Vec<TxDetails>> {
-        todo!();
+        // TODO: actual implementation
+        Ok(vec![
+            TxDetails {
+                id: "ac666ce1fcf377e3347b0e9b7b5ea337031c430d32997148690db51b8be8b7a3".to_string(),
+                output_address: "bc1qfqu6adfhkeeprwjpnpdjfuy3pjsanr0qcym2g9".to_string(),
+                output_sat: 23507057,
+                on_chain_fee_sat: 2855,
+                status: TxStatus::InMempool,
+            },
+            TxDetails {
+                id: "a40274f2f8ff9a46393239964a0228f866ce9f5d445b03fc796ee3a2ea8ee0fe".to_string(),
+                output_address: "1EmRfa3JKaprPwjnyycVqWLQG5BLDGV4T6".to_string(),
+                output_sat: 6666666,
+                on_chain_fee_sat: 3334,
+                status: TxStatus::Confirmed {
+                    number_of_blocks: 3,
+                    confirmed_at: SystemTime::UNIX_EPOCH + Duration::from_secs(1673340974),
+                },
+            },
+            TxDetails {
+                id: "7f119fb2b373150009b686b3d8b886f1ec1601e1931cce35458d33adae496b38".to_string(),
+                output_address: "bc1q8ratkxsyzsj2fmgt04ew72fd5d6q80s37m2cy7m2maefpkxvjpuq4dp7uk"
+                    .to_string(),
+                output_sat: 123123123,
+                on_chain_fee_sat: 1234,
+                status: TxStatus::Confirmed {
+                    number_of_blocks: 400,
+                    confirmed_at: SystemTime::UNIX_EPOCH + Duration::from_secs(1673100974),
+                },
+            },
+        ])
     }
 
     fn get_tx_status_internal(
