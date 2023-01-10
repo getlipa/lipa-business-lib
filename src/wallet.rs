@@ -2,9 +2,8 @@ use crate::errors::{invalid_input, permanent_failure, runtime_error, LipaResult,
 use crate::{LipaError, RuntimeErrorCode};
 use bdk::bitcoin::consensus::deserialize;
 use bdk::bitcoin::consensus::serialize;
-use bdk::bitcoin::hashes::sha256::Hash;
 use bdk::bitcoin::psbt::Psbt;
-use bdk::bitcoin::{Address, Network, OutPoint, Script, Txid, WScriptHash};
+use bdk::bitcoin::{Address, Network, OutPoint, Txid};
 use bdk::blockchain::{Blockchain, ElectrumBlockchain};
 use bdk::database::{Database, MemoryDatabase};
 use bdk::electrum_client::Client;
@@ -117,13 +116,23 @@ impl Wallet {
     //
     // The main issue is that the goal is to know if a drain tx is affordable before knowing to
     // which address we want to drain to. For this reason, we try to prepare a drain tx
-    // that spends to a burner address.
+    // that spends to the a local wallet address. In some very unlikely edge cases, depending on
+    // the destination address that is used, it could happen that the actual drain tx isn't
+    // affordable.
     //
     // We are careful about dropping the prepared tx asap, as we don't want this tx to ever be signed.
     pub fn is_drain_tx_affordable(&self, confirm_in_blocks: u32) -> LipaResult<bool> {
-        let burner_address = { Self::get_burner_address(self.wallet.lock().unwrap().network())? };
+        let local_address = {
+            self.wallet
+                .lock()
+                .unwrap()
+                .get_address(AddressIndex::Peek(0))
+                .map_to_permanent_failure("Failed to get address from local wallet")?
+                .address
+                .to_string()
+        };
 
-        match self.prepare_drain_tx(burner_address, confirm_in_blocks) {
+        match self.prepare_drain_tx(local_address, confirm_in_blocks) {
             Ok(_) => Ok(true),
             Err(e) => {
                 if matches!(
@@ -382,26 +391,6 @@ impl Wallet {
             .map_to_permanent_failure("Failed to get sync time")?
             .ok_or_else(|| permanent_failure("Sync time is empty for synced wallet"))?;
         Ok(sync_time.block_time.height)
-    }
-
-    fn get_burner_address(network: Network) -> LipaResult<String> {
-        // The following invalid script hash can be obtained from the string "getlipa.com"
-        // SHA-256( "getlipa.com" ) = 0x81d109c67004de69c38178d44681baa943756810f2e5e0e94441da3fd19595e3
-        // Computed using: https://md5calc.com/hash/sha256/getlipa.com
-        let invalid_script_hash = WScriptHash::from_hash(
-            Hash::from_str("81d109c67004de69c38178d44681baa943756810f2e5e0e94441da3fd19595e3")
-                .map_to_permanent_failure("Failed to parse hardcoded script hash")?,
-        );
-
-        // Get a p2wsh address as it provides a worst case scenario regarding final tx size
-        // (p2tr would also result in the same tx size)
-        // Drain tx sizes with a single input utxo:
-        //      p2pkh 415 - p2sh 413 - p2wsh 424 - p2wpkh 412 - p2tr 424
-        let invalid_script = Script::new_v0_p2wsh(&invalid_script_hash);
-
-        Ok(Address::from_script(&invalid_script, network)
-            .map_to_permanent_failure("Failed to get burner address from hardcoded script hash")?
-            .to_string())
     }
 
     fn get_confirmed_utxo_outpoints(

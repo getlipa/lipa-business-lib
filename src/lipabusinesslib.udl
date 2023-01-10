@@ -142,7 +142,8 @@ interface Wallet {
     [Throws=LipaError]
     sequence<TxDetails> get_spending_txs();
 
-    // Return true if the local wallet has enough funds for prepare_drain_tx() to be successful
+    // Provides an estimation of the local wallet having enough funds for prepare_drain_tx() to be successful.
+    // Returns true if prepare_drain_tx() is likely to succeed, false otherwise.
     //
     // Parameters:
     // * confirm_in_blocks - the target number of blocks used to estimate the on-chain fee. The value that will be
