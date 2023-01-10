@@ -172,7 +172,8 @@ impl Wallet {
             .manually_selected_only()
             .drain_to(address.script_pubkey())
             .fee_rate(fee_rate)
-            .enable_rbf();
+            .enable_rbf()
+            .allow_dust(false);
 
         let (psbt, tx_details) = tx_builder
             .finish()
