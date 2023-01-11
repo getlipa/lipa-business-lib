@@ -178,6 +178,10 @@ mod nigiri_tests {
             TxStatus::NotInMempool
         );
 
+        // No txs in the wallet before it signs anything.
+        let spending_txs = wallet.get_spending_txs().unwrap();
+        assert_eq!(spending_txs.len(), 0);
+
         wallet
             .sign_and_broadcast_tx(drain_tx.blob, REGTEST_SPEND_DESCRIPTOR.to_string())
             .unwrap();
@@ -317,5 +321,21 @@ mod nigiri_tests {
 
         // 391 sats is not enough to create a drain tx
         assert!(!wallet.is_drain_tx_affordable(1).unwrap());
+
+        // Drain the wallet to the wallet address.
+        let tx_id_confirmed = nigiri::fund_address(0.1, &our_addr).unwrap();
+        let another_our_addr = wallet.get_addr().unwrap();
+        nigiri::wait_for_electrum_to_see_tx(&tx_id_confirmed);
+
+        let drain_tx = wallet.prepare_drain_tx(another_our_addr, 1).unwrap();
+        wallet
+            .sign_and_broadcast_tx(drain_tx.blob, REGTEST_SPEND_DESCRIPTOR.to_string())
+            .unwrap();
+        nigiri::mine_blocks(1).unwrap();
+        sleep(Duration::from_secs(5));
+        wallet.sync_balance().unwrap();
+        // We still see only two old txs, but not the new one.
+        let spending_txs = wallet.get_spending_txs().unwrap();
+        assert_eq!(spending_txs.len(), 2);
     }
 }

@@ -246,7 +246,9 @@ impl Wallet {
             .list_transactions(include_raw)
             .map_to_permanent_failure("Wallet failed to list txs")?
             .into_iter()
-            .filter(|tx| tx.sent > 0)
+            // If we send more than receive (plus fee) it means that there is at
+            // least one foreign output.
+            .filter(|tx| tx.sent > tx.received + tx.fee.unwrap_or(0))
             .map(|tx| Self::map_to_tx_details(tx, &wallet, tip_height));
 
         let mut txs_details = try_collect(txs_details)?;
