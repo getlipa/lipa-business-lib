@@ -178,9 +178,10 @@ mod nigiri_tests {
             TxStatus::NotInMempool
         );
 
-        wallet
+        let broadcasted_tx = wallet
             .sign_and_broadcast_tx(drain_tx.blob, REGTEST_SPEND_DESCRIPTOR.to_string())
             .unwrap();
+        assert_eq!(broadcasted_tx.id, drain_tx.id);
 
         assert_eq!(
             wallet.sync_balance().unwrap(),
@@ -278,9 +279,10 @@ mod nigiri_tests {
         let tx = wallet
             .prepare_send_tx(REGTEST_TARGET_ADDR.to_string(), 9_999_400, 1)
             .unwrap();
-        wallet
+        let broadcasted_tx = wallet
             .sign_and_broadcast_tx(tx.blob, REGTEST_SPEND_DESCRIPTOR.to_string())
             .unwrap();
+        assert_eq!(broadcasted_tx.id, tx.id);
 
         // Spend tx appears in the list of spending txs.
         let spending_txs = wallet.get_spending_txs().unwrap();

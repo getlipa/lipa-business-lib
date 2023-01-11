@@ -132,7 +132,7 @@ interface Wallet {
 
     // Signs and broadcasts a provided tx. Requires a spend descriptor to be used to sign the transaction.
     [Throws=LipaError]
-    void sign_and_broadcast_tx(sequence<u8> tx_blob, string spend_descriptor);
+    TxDetails sign_and_broadcast_tx(sequence<u8> tx_blob, string spend_descriptor);
 
     // Returns the status of a tx given its tx id.
     [Throws=LipaError]
