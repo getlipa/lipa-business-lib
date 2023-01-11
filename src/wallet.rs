@@ -202,7 +202,7 @@ impl Wallet {
         &self,
         tx_blob: Vec<u8>,
         spend_descriptor: String,
-    ) -> LipaResult<()> {
+    ) -> LipaResult<TxDetails> {
         let mut psbt = deserialize::<Psbt>(&tx_blob).map_to_invalid_input("Invalid tx blob")?;
 
         let wallet = bdk::Wallet::new(
@@ -225,7 +225,14 @@ impl Wallet {
             .map_to_runtime_error(
                 RuntimeErrorCode::ElectrumServiceUnavailable,
                 "Failed to broadcast tx",
-            )
+            )?;
+        Ok(TxDetails {
+            id: "id".to_string(),
+            output_address: "address".to_string(),
+            output_sat: 1324,
+            on_chain_fee_sat: 123,
+            status: TxStatus::InMempool,
+        })
     }
 
     pub fn get_tx_status(&self, txid: String) -> LipaResult<TxStatus> {
