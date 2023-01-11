@@ -192,6 +192,16 @@ mod nigiri_tests {
             }
         );
 
+        // Drain tx appears in the list of spending txs.
+        let spending_txs = wallet.get_spending_txs().unwrap();
+        assert_eq!(spending_txs.len(), 1);
+        let spending_tx = spending_txs.first().unwrap();
+        assert_eq!(spending_tx.id, drain_tx.id);
+        assert_eq!(spending_tx.output_address, REGTEST_TARGET_ADDR);
+        assert_eq!(spending_tx.output_sat, 19999822);
+        assert_eq!(spending_tx.on_chain_fee_sat, 178);
+        assert_eq!(spending_tx.status, TxStatus::InMempool);
+
         assert_eq!(
             wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
             TxStatus::InMempool
@@ -199,6 +209,19 @@ mod nigiri_tests {
 
         nigiri::mine_blocks(1).unwrap();
         sleep(Duration::from_secs(5));
+
+        // Drain tx appears in the list of spending txs as confirmed.
+        let spending_txs = wallet.get_spending_txs().unwrap();
+        assert_eq!(spending_txs.len(), 1);
+        let spending_tx = spending_txs.first().unwrap();
+        assert_eq!(spending_tx.id, drain_tx.id);
+        assert!(matches!(
+            spending_tx.status,
+            TxStatus::Confirmed {
+                number_of_blocks: 1,
+                confirmed_at: _,
+            }
+        ));
 
         assert_eq!(
             wallet.sync_balance().unwrap(),
@@ -244,7 +267,7 @@ mod nigiri_tests {
         sleep(Duration::from_secs(5));
 
         assert_eq!(
-            wallet.get_tx_status(drain_tx.id).unwrap(),
+            wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
             TxStatus::Confirmed {
                 number_of_blocks: 12,
                 confirmed_at: confirmed_at_after_1_conf
@@ -259,6 +282,18 @@ mod nigiri_tests {
             .sign_and_broadcast_tx(tx.blob, REGTEST_SPEND_DESCRIPTOR.to_string())
             .unwrap();
 
+        // Spend tx appears in the list of spending txs.
+        let spending_txs = wallet.get_spending_txs().unwrap();
+        assert_eq!(spending_txs.len(), 2);
+        let spending_tx = spending_txs.first().unwrap();
+        let draining_tx = spending_txs.last().unwrap();
+        assert_eq!(spending_tx.id, tx.id);
+        assert_eq!(spending_tx.output_address, REGTEST_TARGET_ADDR);
+        assert_eq!(spending_tx.output_sat, 9_999_400);
+        assert_eq!(spending_tx.on_chain_fee_sat, 209);
+        assert_eq!(spending_tx.status, TxStatus::InMempool);
+        assert_eq!(draining_tx.id, drain_tx.id);
+
         nigiri::mine_blocks(1).unwrap();
         sleep(Duration::from_secs(5));
 
@@ -271,6 +306,15 @@ mod nigiri_tests {
                 confirmed: 391,
             }
         );
+
+        // After sending tx confirmed, ordering is preserved.
+        let spending_txs = wallet.get_spending_txs().unwrap();
+        assert_eq!(spending_txs.len(), 2);
+        let spending_tx = spending_txs.first().unwrap();
+        let draining_tx = spending_txs.last().unwrap();
+        assert_eq!(spending_tx.id, tx.id);
+        assert_eq!(draining_tx.id, drain_tx.id);
+
         // 391 sats is not enough to create a drain tx
         assert!(!wallet.is_drain_tx_affordable(1).unwrap());
     }

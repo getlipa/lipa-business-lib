@@ -1,7 +1,8 @@
-use crate::errors::{invalid_input, permanent_failure, runtime_error, LipaResult, MapToLipaError};
-use crate::{LipaError, RuntimeErrorCode};
-use bdk::bitcoin::consensus::deserialize;
-use bdk::bitcoin::consensus::serialize;
+use crate::errors::*;
+use crate::RuntimeErrorCode;
+use bdk::bitcoin::blockdata::script::Script;
+use bdk::bitcoin::blockdata::transaction::TxOut;
+use bdk::bitcoin::consensus::{deserialize, serialize};
 use bdk::bitcoin::psbt::Psbt;
 use bdk::bitcoin::{Address, Network, OutPoint, Txid};
 use bdk::blockchain::{Blockchain, ElectrumBlockchain};
@@ -9,7 +10,7 @@ use bdk::database::{Database, MemoryDatabase};
 use bdk::electrum_client::Client;
 use bdk::sled::Tree;
 use bdk::wallet::AddressIndex;
-use bdk::{Balance, Error, SignOptions, SyncOptions};
+use bdk::{Balance, Error, SignOptions, SyncOptions, TransactionDetails};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -22,9 +23,11 @@ pub struct Config {
     pub watch_descriptor: String,
 }
 
+type BdkWallet = bdk::Wallet<Tree>;
+
 pub struct Wallet {
     blockchain: ElectrumBlockchain,
-    wallet: Arc<Mutex<bdk::Wallet<Tree>>>,
+    wallet: Arc<Mutex<BdkWallet>>,
 }
 
 pub struct Tx {
@@ -34,7 +37,7 @@ pub struct Tx {
     pub output_sat: u64,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum TxStatus {
     NotInMempool,
     InMempool,
@@ -235,37 +238,20 @@ impl Wallet {
     }
 
     pub fn get_spending_txs(&self) -> LipaResult<Vec<TxDetails>> {
-        // TODO: actual implementation
-        Ok(vec![
-            TxDetails {
-                id: "ac666ce1fcf377e3347b0e9b7b5ea337031c430d32997148690db51b8be8b7a3".to_string(),
-                output_address: "bc1qfqu6adfhkeeprwjpnpdjfuy3pjsanr0qcym2g9".to_string(),
-                output_sat: 23507057,
-                on_chain_fee_sat: 2855,
-                status: TxStatus::InMempool,
-            },
-            TxDetails {
-                id: "a40274f2f8ff9a46393239964a0228f866ce9f5d445b03fc796ee3a2ea8ee0fe".to_string(),
-                output_address: "1EmRfa3JKaprPwjnyycVqWLQG5BLDGV4T6".to_string(),
-                output_sat: 6666666,
-                on_chain_fee_sat: 3334,
-                status: TxStatus::Confirmed {
-                    number_of_blocks: 3,
-                    confirmed_at: SystemTime::UNIX_EPOCH + Duration::from_secs(1673340974),
-                },
-            },
-            TxDetails {
-                id: "7f119fb2b373150009b686b3d8b886f1ec1601e1931cce35458d33adae496b38".to_string(),
-                output_address: "bc1q8ratkxsyzsj2fmgt04ew72fd5d6q80s37m2cy7m2maefpkxvjpuq4dp7uk"
-                    .to_string(),
-                output_sat: 123123123,
-                on_chain_fee_sat: 1234,
-                status: TxStatus::Confirmed {
-                    number_of_blocks: 400,
-                    confirmed_at: SystemTime::UNIX_EPOCH + Duration::from_secs(1673100974),
-                },
-            },
-        ])
+        let tip_height = self.sync()?;
+        let wallet = self.wallet.lock().unwrap();
+
+        let include_raw = true;
+        let txs_details = wallet
+            .list_transactions(include_raw)
+            .map_to_permanent_failure("Wallet failed to list txs")?
+            .into_iter()
+            .filter(|tx| tx.sent > 0)
+            .map(|tx| Self::map_to_tx_details(tx, &wallet, tip_height));
+
+        let mut txs_details = try_collect(txs_details)?;
+        txs_details.sort_unstable_by_key(|tx| (tx.status.clone(), tx.id.clone()));
+        Ok(txs_details)
     }
 
     pub fn get_addr(&self) -> LipaResult<String> {
@@ -342,30 +328,13 @@ impl Wallet {
     fn get_tx_status_internal(
         wallet: &bdk::Wallet<Tree>,
         txid: Txid,
-        tip: u32,
+        tip_height: u32,
     ) -> LipaResult<TxStatus> {
         let include_raw = false;
         let tx = wallet
             .get_tx(&txid, include_raw)
             .map_to_permanent_failure("Failed to get tx from the wallet")?;
-
-        let status = match tx {
-            None => TxStatus::NotInMempool,
-            Some(tx) => match tx.confirmation_time {
-                None => TxStatus::InMempool,
-                Some(block_time) => {
-                    debug_assert!(tip >= block_time.height);
-                    let number_of_blocks = 1 + tip - block_time.height;
-                    let confirmed_at =
-                        SystemTime::UNIX_EPOCH + Duration::from_secs(block_time.timestamp);
-                    TxStatus::Confirmed {
-                        number_of_blocks,
-                        confirmed_at,
-                    }
-                }
-            },
-        };
-        Ok(status)
+        Ok(Self::to_tx_status(tx, tip_height))
     }
 
     fn sync(&self) -> LipaResult<u32> {
@@ -412,6 +381,74 @@ impl Wallet {
 
         Ok(confirmed_utxo_outpoints)
     }
+
+    fn map_to_tx_details(
+        tx: TransactionDetails,
+        wallet: &BdkWallet,
+        tip_height: u32,
+    ) -> LipaResult<TxDetails> {
+        let raw_tx = tx
+            .transaction
+            .as_ref()
+            .ok_or_else(|| permanent_failure("Tx does not have raw tx"))?;
+
+        let foreign_output = Self::find_foreign_output(&raw_tx.output, wallet)?
+            .ok_or_else(|| permanent_failure("None of tx outputs are foreign"))?;
+        let output_address = Address::from_script(&foreign_output, wallet.network())
+            .map_to_permanent_failure("Failed to build address from script")?
+            .to_string();
+
+        let on_chain_fee_sat = tx
+            .fee
+            .ok_or_else(|| permanent_failure("Tx does not have fee set"))?;
+
+        if tx.sent < tx.received + on_chain_fee_sat {
+            return Err(permanent_failure(
+                "In the tx wallet receives more than sends",
+            ));
+        }
+        let output_sat = tx.sent - tx.received - on_chain_fee_sat;
+
+        Ok(TxDetails {
+            id: tx.txid.to_string(),
+            output_address,
+            output_sat,
+            on_chain_fee_sat,
+            status: Self::to_tx_status(Some(tx), tip_height),
+        })
+    }
+
+    fn find_foreign_output(outputs: &Vec<TxOut>, wallet: &BdkWallet) -> LipaResult<Option<Script>> {
+        // Waiting for Iterator::try_find() to become stable.
+        for output in outputs {
+            if !wallet
+                .is_mine(&output.script_pubkey)
+                .map_to_permanent_failure("Failed to check if output belongs to the wallet")?
+            {
+                return Ok(Some(output.script_pubkey.clone()));
+            }
+        }
+        Ok(None)
+    }
+
+    fn to_tx_status(tx: Option<TransactionDetails>, tip_height: u32) -> TxStatus {
+        match tx {
+            None => TxStatus::NotInMempool,
+            Some(tx) => match tx.confirmation_time {
+                None => TxStatus::InMempool,
+                Some(block_time) => {
+                    debug_assert!(tip_height >= block_time.height);
+                    let number_of_blocks = 1 + tip_height - block_time.height;
+                    let confirmed_at =
+                        SystemTime::UNIX_EPOCH + Duration::from_secs(block_time.timestamp);
+                    TxStatus::Confirmed {
+                        number_of_blocks,
+                        confirmed_at,
+                    }
+                }
+            },
+        }
+    }
 }
 
 fn get_change_descriptor_from_descriptor(descriptor: &str) -> LipaResult<String> {
@@ -428,6 +465,17 @@ fn get_change_descriptor_from_descriptor(descriptor: &str) -> LipaResult<String>
     }
 
     Ok(descriptor.replacen("0/*)", "1/*)", 1))
+}
+
+// Waiting for Iterator::try_collect() to become stable.
+fn try_collect<T, E, I: std::iter::IntoIterator<Item = Result<T, E>>>(
+    iter: I,
+) -> Result<Vec<T>, E> {
+    let mut vec = Vec::new();
+    for item in iter {
+        vec.push(item?);
+    }
+    Ok(vec)
 }
 
 #[cfg(test)]

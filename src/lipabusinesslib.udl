@@ -138,7 +138,9 @@ interface Wallet {
     [Throws=LipaError]
     TxStatus get_tx_status(string txid);
 
-    // Returns a list of all txs that have been sent out from the local wallet
+    // Returns a list of all txs that have been sent out from the local wallet.
+    // The list is sorted from newest (unconfirmed) txs to txs with higher number of confirmations,
+    // and by tx id if number of confirmations is the same.
     [Throws=LipaError]
     sequence<TxDetails> get_spending_txs();
 
