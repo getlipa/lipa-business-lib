@@ -369,7 +369,7 @@ impl Wallet {
     }
 
     fn get_tx_status_internal(wallet: &bdk::Wallet<Tree>, txid: Txid) -> LipaResult<TxStatus> {
-        let tip_height = Self::get_tip_height(wallet)?;
+        let tip_height = Self::get_synced_tip_height(wallet)?;
         let include_raw = false;
         let tx = wallet
             .get_tx(&txid, include_raw)
@@ -390,18 +390,14 @@ impl Wallet {
                     RuntimeErrorCode::GenericError,
                     "Failed to sync the BDK wallet",
                 ),
-            })?;
-        Ok(())
+            })
     }
 
-    fn get_tip_height(wallet: &BdkWallet) -> LipaResult<u32> {
-        Ok(wallet
-            .database()
-            .get_sync_time()
-            .map_to_runtime_error(RuntimeErrorCode::WalletNotSynced, "Failed to get sync time")?
-            .ok_or_else(|| runtime_error(RuntimeErrorCode::WalletNotSynced, "Sync time is empty"))?
-            .block_time
-            .height)
+    fn get_synced_tip_height(wallet: &BdkWallet) -> LipaResult<u32> {
+        match wallet.database().get_sync_time() {
+            Ok(Some(sync_time)) => Ok(sync_time.block_time.height),
+            _ => Ok(0),
+        }
     }
 
     fn get_confirmed_utxo_outpoints(wallet: &bdk::Wallet<Tree>) -> LipaResult<Vec<OutPoint>> {
@@ -425,7 +421,7 @@ impl Wallet {
     }
 
     fn map_to_tx_details(tx: TransactionDetails, wallet: &BdkWallet) -> LipaResult<TxDetails> {
-        let tip_height = Self::get_tip_height(wallet)?;
+        let tip_height = Self::get_synced_tip_height(wallet)?;
 
         let raw_tx = tx
             .transaction
