@@ -394,9 +394,13 @@ impl Wallet {
     }
 
     fn get_synced_tip_height(wallet: &BdkWallet) -> LipaResult<u32> {
-        match wallet.database().get_sync_time() {
-            Ok(Some(sync_time)) => Ok(sync_time.block_time.height),
-            _ => Ok(0),
+        match wallet
+            .database()
+            .get_sync_time()
+            .map_to_permanent_failure("Failed to get sync time")?
+        {
+            Some(sync_time) => Ok(sync_time.block_time.height),
+            None => Ok(0),
         }
     }
 
