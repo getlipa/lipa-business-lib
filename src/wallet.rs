@@ -1,5 +1,4 @@
 use crate::errors::*;
-use crate::RuntimeErrorCode;
 use bdk::bitcoin::blockdata::script::Script;
 use bdk::bitcoin::blockdata::transaction::TxOut;
 use bdk::bitcoin::consensus::{deserialize, serialize};
@@ -132,10 +131,9 @@ impl Wallet {
                 .get_address(AddressIndex::Peek(0))
                 .map_to_permanent_failure("Failed to get address from local wallet")?
                 .address
-                .to_string()
         };
 
-        match self.prepare_drain_tx(local_address, confirm_in_blocks) {
+        match self.prepare_drain_tx_internal(local_address, confirm_in_blocks) {
             Ok(_) => Ok(true),
             Err(LipaError::RuntimeError {
                 code: RuntimeErrorCode::NotEnoughFunds,
@@ -154,6 +152,26 @@ impl Wallet {
             ));
         }
 
+        let wallet = self.wallet.lock().unwrap();
+        let address_is_mine = wallet
+            .is_mine(&address.script_pubkey())
+            .map_to_permanent_failure("Failed to check if address belongs to the wallet")?;
+        if address_is_mine {
+            return Err(runtime_error(
+                RuntimeErrorCode::SendToOurselves,
+                "Trying to drain wallet to address belonging to the wallet",
+            ));
+        }
+        drop(wallet); // To release the lock.
+
+        self.prepare_drain_tx_internal(address, confirm_in_blocks)
+    }
+
+    fn prepare_drain_tx_internal(
+        &self,
+        address: Address,
+        confirm_in_blocks: u32,
+    ) -> LipaResult<Tx> {
         let tip_height = self.sync()?;
 
         let fee_rate = self
@@ -205,7 +223,7 @@ impl Wallet {
     ) -> LipaResult<TxDetails> {
         let mut psbt = deserialize::<Psbt>(&tx_blob).map_to_invalid_input("Invalid tx blob")?;
 
-        let wallet = bdk::Wallet::new(
+        let signing_wallet = bdk::Wallet::new(
             &spend_descriptor,
             Some(&get_change_descriptor_from_descriptor(&spend_descriptor)?),
             self.wallet.lock().unwrap().network(),
@@ -213,26 +231,27 @@ impl Wallet {
         )
         .map_to_permanent_failure("Failed to create signing-capable wallet")?;
 
-        let is_finalized = wallet
+        let is_finalized = signing_wallet
             .sign(&mut psbt, SignOptions::default())
             .map_to_permanent_failure("Failed to sign PSBT")?;
         if !is_finalized {
             return Err(permanent_failure("Wallet didn't sign all inputs"));
         }
 
-        self.blockchain
-            .broadcast(&psbt.extract_tx())
-            .map_to_runtime_error(
-                RuntimeErrorCode::ElectrumServiceUnavailable,
-                "Failed to broadcast tx",
-            )?;
-        Ok(TxDetails {
-            id: "id".to_string(),
-            output_address: "address".to_string(),
-            output_sat: 1324,
-            on_chain_fee_sat: 123,
-            status: TxStatus::InMempool,
-        })
+        let tx = psbt.extract_tx();
+        self.blockchain.broadcast(&tx).map_to_runtime_error(
+            RuntimeErrorCode::ElectrumServiceUnavailable,
+            "Failed to broadcast tx",
+        )?;
+
+        let tip_height = self.sync()?;
+        let wallet = self.wallet.lock().unwrap();
+        let include_raw = true;
+        let tx = wallet
+            .get_tx(&tx.txid(), include_raw)
+            .map_to_permanent_failure("Failed to get tx from the wallet")?
+            .ok_or_else(|| permanent_failure("Just signed tx not found"))?;
+        Self::map_to_tx_details(tx, &wallet, tip_height)
     }
 
     pub fn get_tx_status(&self, txid: String) -> LipaResult<TxStatus> {
@@ -290,6 +309,18 @@ impl Wallet {
                 "Invalid block confirmation target. Please use a target in the range [1; 25]",
             ));
         }
+
+        let wallet = self.wallet.lock().unwrap();
+        let address_is_mine = wallet
+            .is_mine(&address.script_pubkey())
+            .map_to_permanent_failure("Failed to check if address belongs to the wallet")?;
+        if address_is_mine {
+            return Err(runtime_error(
+                RuntimeErrorCode::SendToOurselves,
+                "Trying to drain wallet to address belonging to the wallet",
+            ));
+        }
+        drop(wallet); // To release the lock.
 
         let tip_height = self.sync()?;
 

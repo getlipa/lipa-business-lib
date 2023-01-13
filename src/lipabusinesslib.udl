@@ -22,9 +22,10 @@ enum LogLevel {
 
 // A code that specifies the RuntimError that ocurred
 enum RuntimeErrorCode {
-    "RemoteServiceUnavailable", // A remote service is unavailable. Could there be a loss of internet connection?
     "ElectrumServiceUnavailable", // The electrum service is unavailable. Could there be a loss of internet connection?
     "NotEnoughFunds", // There are not enough funds to create the tx that was requested
+    "RemoteServiceUnavailable", // A remote service is unavailable. Could there be a loss of internet connection?
+    "SendToOurselves", // Trying to send funds to an address belonging to the wallet
     "GenericError", // A generic error for unexpected/unknown runtime errors
 };
 
