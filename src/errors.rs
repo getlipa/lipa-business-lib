@@ -17,10 +17,11 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum RuntimeErrorCode {
-    RemoteServiceUnavailable,
     ElectrumServiceUnavailable,
-    NotEnoughFunds,
     GenericError,
+    NotEnoughFunds,
+    RemoteServiceUnavailable,
+    SendToOurselves,
 }
 
 impl Display for RuntimeErrorCode {

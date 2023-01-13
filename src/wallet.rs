@@ -1,5 +1,4 @@
 use crate::errors::*;
-use crate::RuntimeErrorCode;
 use bdk::bitcoin::blockdata::script::Script;
 use bdk::bitcoin::blockdata::transaction::TxOut;
 use bdk::bitcoin::consensus::{deserialize, serialize};
@@ -132,10 +131,9 @@ impl Wallet {
                 .get_address(AddressIndex::Peek(0))
                 .map_to_permanent_failure("Failed to get address from local wallet")?
                 .address
-                .to_string()
         };
 
-        match self.prepare_drain_tx(local_address, confirm_in_blocks) {
+        match self.prepare_drain_tx_internal(local_address, confirm_in_blocks) {
             Ok(_) => Ok(true),
             Err(LipaError::RuntimeError {
                 code: RuntimeErrorCode::NotEnoughFunds,
@@ -154,6 +152,26 @@ impl Wallet {
             ));
         }
 
+        let wallet = self.wallet.lock().unwrap();
+        let address_is_mine = wallet
+            .is_mine(&address.script_pubkey())
+            .map_to_permanent_failure("Failed to check if address belongs to the wallet")?;
+        if address_is_mine {
+            return Err(runtime_error(
+                RuntimeErrorCode::SendToOurselves,
+                "Trying to drain wallet to address belonging to the wallet",
+            ));
+        }
+        drop(wallet); // To release the lock.
+
+        self.prepare_drain_tx_internal(address, confirm_in_blocks)
+    }
+
+    fn prepare_drain_tx_internal(
+        &self,
+        address: Address,
+        confirm_in_blocks: u32,
+    ) -> LipaResult<Tx> {
         let tip_height = self.sync()?;
 
         let fee_rate = self
@@ -291,6 +309,18 @@ impl Wallet {
                 "Invalid block confirmation target. Please use a target in the range [1; 25]",
             ));
         }
+
+        let wallet = self.wallet.lock().unwrap();
+        let address_is_mine = wallet
+            .is_mine(&address.script_pubkey())
+            .map_to_permanent_failure("Failed to check if address belongs to the wallet")?;
+        if address_is_mine {
+            return Err(runtime_error(
+                RuntimeErrorCode::SendToOurselves,
+                "Trying to drain wallet to address belonging to the wallet",
+            ));
+        }
+        drop(wallet); // To release the lock.
 
         let tip_height = self.sync()?;
 

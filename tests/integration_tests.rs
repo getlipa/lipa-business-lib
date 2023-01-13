@@ -5,8 +5,7 @@ use bdk::bitcoin::psbt::Psbt;
 use bdk::bitcoin::{Address, Network, Txid};
 use std::fs::remove_dir_all;
 use std::str::FromStr;
-use uniffi_lipabusinesslib::RuntimeErrorCode::NotEnoughFunds;
-use uniffi_lipabusinesslib::{Config, LipaError, Wallet};
+use uniffi_lipabusinesslib::{Config, LipaError, RuntimeErrorCode, Wallet};
 
 const WATCH_DESCRIPTOR_WITH_FUNDS: &str = "wpkh([aed2a027/84'/1'/0']tpubDCvyR4gGk5U6r1Q1HMQtgZYMD3a9bVyt7Tv9BWgcBCQsff4aqR7arUGPTMaUbVwaH8TeaK924GJr9nHyGPBtqSCD8BCjMnJb1qZFjK4ACfL/0/*)";
 
@@ -42,6 +41,17 @@ fn test_prepare_drain_tx() {
         watch_descriptor: WATCH_DESCRIPTOR_WITH_FUNDS.to_string(),
     })
     .unwrap();
+
+    let our_addr = wallet.get_addr().unwrap();
+    let result = wallet.prepare_drain_tx(our_addr, 1);
+    assert!(result.is_err());
+    assert!(matches!(
+        result,
+        Err(LipaError::RuntimeError {
+            code: RuntimeErrorCode::SendToOurselves,
+            ..
+        })
+    ));
 
     assert!(wallet.is_drain_tx_affordable(1).unwrap());
 
@@ -87,7 +97,7 @@ fn test_drain_empty_wallet() {
     assert!(matches!(
         drain_tx_result,
         Err(LipaError::RuntimeError {
-            code: NotEnoughFunds,
+            code: RuntimeErrorCode::NotEnoughFunds,
             ..
         })
     ));
@@ -323,21 +333,5 @@ mod nigiri_tests {
 
         // 391 sats is not enough to create a drain tx
         assert!(!wallet.is_drain_tx_affordable(1).unwrap());
-
-        // Drain the wallet to the wallet address.
-        let tx_id_confirmed = nigiri::fund_address(0.1, &our_addr).unwrap();
-        let another_our_addr = wallet.get_addr().unwrap();
-        nigiri::wait_for_electrum_to_see_tx(&tx_id_confirmed);
-
-        let drain_tx = wallet.prepare_drain_tx(another_our_addr, 1).unwrap();
-        wallet
-            .sign_and_broadcast_tx(drain_tx.blob, REGTEST_SPEND_DESCRIPTOR.to_string())
-            .unwrap();
-        nigiri::mine_blocks(1).unwrap();
-        sleep(Duration::from_secs(5));
-        wallet.sync_balance().unwrap();
-        // We still see only two old txs, but not the new one.
-        let spending_txs = wallet.get_spending_txs().unwrap();
-        assert_eq!(spending_txs.len(), 2);
     }
 }
