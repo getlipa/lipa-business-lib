@@ -26,7 +26,6 @@ enum RuntimeErrorCode {
     "NotEnoughFunds", // There are not enough funds to create the tx that was requested
     "RemoteServiceUnavailable", // A remote service is unavailable. Could there be a loss of internet connection?
     "SendToOurselves", // Trying to send funds to an address belonging to the wallet
-    "WalletNotSynced", // The wallet isn't synced. Suggested action: sync and try again.
     "GenericError", // A generic error for unexpected/unknown runtime errors
 };
 

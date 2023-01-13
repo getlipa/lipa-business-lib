@@ -21,7 +21,6 @@ pub enum RuntimeErrorCode {
     NotEnoughFunds,
     RemoteServiceUnavailable,
     SendToOurselves,
-    WalletNotSynced,
     GenericError,
 }
 
