@@ -189,7 +189,7 @@ mod nigiri_tests {
         );
 
         // No txs in the wallet before it signs anything.
-        let spending_txs = wallet.get_spending_txs().unwrap();
+        let spending_txs = wallet.get_spending_txs(true).unwrap();
         assert_eq!(spending_txs.len(), 0);
 
         let broadcasted_tx = wallet
@@ -208,7 +208,7 @@ mod nigiri_tests {
         );
 
         // Drain tx appears in the list of spending txs.
-        let spending_txs = wallet.get_spending_txs().unwrap();
+        let spending_txs = wallet.get_spending_txs(true).unwrap();
         assert_eq!(spending_txs.len(), 1);
         let spending_tx = spending_txs.first().unwrap();
         assert_eq!(spending_tx.id, drain_tx.id);
@@ -226,7 +226,8 @@ mod nigiri_tests {
         sleep(Duration::from_secs(5));
 
         // Drain tx appears in the list of spending txs as confirmed.
-        let spending_txs = wallet.get_spending_txs().unwrap();
+        wallet.sync().unwrap();
+        let spending_txs = wallet.get_spending_txs(false).unwrap();
         assert_eq!(spending_txs.len(), 1);
         let spending_tx = spending_txs.first().unwrap();
         assert_eq!(spending_tx.id, drain_tx.id);
@@ -299,7 +300,7 @@ mod nigiri_tests {
         assert_eq!(broadcasted_tx.id, tx.id);
 
         // Spend tx appears in the list of spending txs.
-        let spending_txs = wallet.get_spending_txs().unwrap();
+        let spending_txs = wallet.get_spending_txs(true).unwrap();
         assert_eq!(spending_txs.len(), 2);
         let spending_tx = spending_txs.first().unwrap();
         let draining_tx = spending_txs.last().unwrap();
@@ -324,7 +325,7 @@ mod nigiri_tests {
         );
 
         // After sending tx confirmed, ordering is preserved.
-        let spending_txs = wallet.get_spending_txs().unwrap();
+        let spending_txs = wallet.get_spending_txs(true).unwrap();
         assert_eq!(spending_txs.len(), 2);
         let spending_tx = spending_txs.first().unwrap();
         let draining_tx = spending_txs.last().unwrap();

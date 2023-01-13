@@ -26,6 +26,7 @@ enum RuntimeErrorCode {
     "NotEnoughFunds", // There are not enough funds to create the tx that was requested
     "RemoteServiceUnavailable", // A remote service is unavailable. Could there be a loss of internet connection?
     "SendToOurselves", // Trying to send funds to an address belonging to the wallet
+    "WalletNotSynced", // The wallet isn't synced. Suggested action: sync and try again.
     "GenericError", // A generic error for unexpected/unknown runtime errors
 };
 
@@ -110,6 +111,10 @@ interface Wallet {
     [Throws=LipaError]
     constructor(Config config);
 
+    // Syncs with Electrum to update the local database
+    [Throws=LipaError]
+    void sync();
+
     // Syncs with Electrum to get the current balance of the wallet.
     [Throws=LipaError]
     Balance sync_balance();
@@ -142,8 +147,13 @@ interface Wallet {
     // Returns a list of all txs that have been sent out from the local wallet.
     // The list is sorted from newest (unconfirmed) txs to txs with higher number of confirmations,
     // and by tx id if number of confirmations is the same.
+    //
+    // Parameters:
+    // * should_sync: if true, will sync with Electrum to make sure returned txs are up-to-date. Can be set to false
+    //      to significantly speed up the execution time of this method, but there's a risk of the returned txs not
+    //      being up-to-date. The method `sync()` can be called regularly to reduce this risk.
     [Throws=LipaError]
-    sequence<TxDetails> get_spending_txs();
+    sequence<TxDetails> get_spending_txs(boolean should_sync);
 
     // Provides an estimation of the local wallet having enough funds for prepare_drain_tx() to be successful.
     // Returns true if prepare_drain_tx() is likely to succeed, false otherwise.
