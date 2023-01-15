@@ -263,11 +263,7 @@ impl Wallet {
         Self::get_tx_status_internal(&wallet, txid)
     }
 
-    pub fn get_spending_txs(&self, should_sync: bool) -> LipaResult<Vec<TxDetails>> {
-        if should_sync {
-            self.sync()?;
-        }
-
+    pub fn get_spending_txs(&self) -> LipaResult<Vec<TxDetails>> {
         let wallet = self.wallet.lock().unwrap();
 
         let include_raw = true;

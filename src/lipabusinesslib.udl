@@ -147,12 +147,10 @@ interface Wallet {
     // The list is sorted from newest (unconfirmed) txs to txs with higher number of confirmations,
     // and by tx id if number of confirmations is the same.
     //
-    // Parameters:
-    // * should_sync: if true, will sync with Electrum to make sure returned txs are up-to-date. Can be set to false
-    //      to significantly speed up the execution time of this method, but there's a risk of the returned txs not
-    //      being up-to-date. The method `sync()` can be called regularly to reduce this risk.
+    // The list is obtained from the local database. To have the list be up-to-date, the method `sync()` should be
+    // called  beforehand.
     [Throws=LipaError]
-    sequence<TxDetails> get_spending_txs(boolean should_sync);
+    sequence<TxDetails> get_spending_txs();
 
     // Provides an estimation of the local wallet having enough funds for prepare_drain_tx() to be successful.
     // Returns true if prepare_drain_tx() is likely to succeed, false otherwise.
