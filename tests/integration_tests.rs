@@ -23,7 +23,8 @@ fn test_get_balance_testnet_electrum() {
     })
     .unwrap();
 
-    let balance = wallet.sync_balance().unwrap();
+    wallet.sync().unwrap();
+    let balance = wallet.get_balance().unwrap();
 
     assert_eq!(balance.confirmed, 88009);
 }
@@ -42,6 +43,7 @@ fn test_prepare_drain_tx() {
     })
     .unwrap();
 
+    wallet.sync().unwrap();
     let our_addr = wallet.get_addr().unwrap();
     let result = wallet.prepare_drain_tx(our_addr, 1);
     assert!(result.is_err());
@@ -54,7 +56,6 @@ fn test_prepare_drain_tx() {
     ));
 
     assert!(wallet.is_drain_tx_affordable(1).unwrap());
-
     let drain_tx = wallet
         .prepare_drain_tx(TESTNET_ADDR.to_string(), 1)
         .unwrap();
@@ -91,6 +92,7 @@ fn test_drain_empty_wallet() {
     })
     .unwrap();
 
+    wallet.sync().unwrap();
     let drain_tx_result = wallet.prepare_drain_tx(TESTNET_ADDR.to_string(), 1);
 
     assert!(drain_tx_result.is_err());
@@ -138,6 +140,8 @@ mod nigiri_tests {
         })
         .unwrap();
 
+        wallet.sync().unwrap();
+
         assert!(!wallet.is_drain_tx_affordable(1).unwrap());
 
         let our_addr = wallet.get_addr().unwrap();
@@ -151,8 +155,9 @@ mod nigiri_tests {
         nigiri::wait_for_electrum_to_see_tx(&tx_id_unconfirmed1);
         nigiri::wait_for_electrum_to_see_tx(&tx_id_unconfirmed2);
 
+        wallet.sync().unwrap();
         assert_eq!(
-            wallet.sync_balance().unwrap(),
+            wallet.get_balance().unwrap(),
             Balance {
                 immature: 0,
                 trusted_pending: 0,
@@ -162,7 +167,6 @@ mod nigiri_tests {
         );
 
         assert!(wallet.is_drain_tx_affordable(1).unwrap());
-
         let drain_tx = wallet
             .prepare_drain_tx(REGTEST_TARGET_ADDR.to_string(), 1)
             .unwrap();
@@ -183,13 +187,13 @@ mod nigiri_tests {
                 .script_pubkey()
         );
 
+        wallet.sync().unwrap();
         assert_eq!(
             wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
             TxStatus::NotInMempool
         );
 
         // No txs in the wallet before it signs anything.
-        wallet.sync().unwrap();
         let spending_txs = wallet.get_spending_txs().unwrap();
         assert_eq!(spending_txs.len(), 0);
 
@@ -199,7 +203,7 @@ mod nigiri_tests {
         assert_eq!(broadcasted_tx.id, drain_tx.id);
 
         assert_eq!(
-            wallet.sync_balance().unwrap(),
+            wallet.get_balance().unwrap(),
             Balance {
                 immature: 0,
                 trusted_pending: 0,
@@ -209,7 +213,6 @@ mod nigiri_tests {
         );
 
         // Drain tx appears in the list of spending txs.
-        wallet.sync().unwrap();
         let spending_txs = wallet.get_spending_txs().unwrap();
         assert_eq!(spending_txs.len(), 1);
         let spending_tx = spending_txs.first().unwrap();
@@ -242,7 +245,7 @@ mod nigiri_tests {
         ));
 
         assert_eq!(
-            wallet.sync_balance().unwrap(),
+            wallet.get_balance().unwrap(),
             Balance {
                 immature: 0,
                 trusted_pending: 0,
@@ -273,6 +276,7 @@ mod nigiri_tests {
         nigiri::mine_blocks(1).unwrap();
         sleep(Duration::from_secs(5));
 
+        wallet.sync().unwrap();
         assert_eq!(
             wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
             TxStatus::Confirmed {
@@ -284,6 +288,7 @@ mod nigiri_tests {
         nigiri::mine_blocks(10).unwrap();
         sleep(Duration::from_secs(5));
 
+        wallet.sync().unwrap();
         assert_eq!(
             wallet.get_tx_status(drain_tx.id.clone()).unwrap(),
             TxStatus::Confirmed {
@@ -302,7 +307,6 @@ mod nigiri_tests {
         assert_eq!(broadcasted_tx.id, tx.id);
 
         // Spend tx appears in the list of spending txs.
-        wallet.sync().unwrap();
         let spending_txs = wallet.get_spending_txs().unwrap();
         assert_eq!(spending_txs.len(), 2);
         let spending_tx = spending_txs.first().unwrap();
@@ -317,8 +321,9 @@ mod nigiri_tests {
         nigiri::mine_blocks(1).unwrap();
         sleep(Duration::from_secs(5));
 
+        wallet.sync().unwrap();
         assert_eq!(
-            wallet.sync_balance().unwrap(),
+            wallet.get_balance().unwrap(),
             Balance {
                 immature: 0,
                 trusted_pending: 0,
@@ -328,7 +333,6 @@ mod nigiri_tests {
         );
 
         // After sending tx confirmed, ordering is preserved.
-        wallet.sync().unwrap();
         let spending_txs = wallet.get_spending_txs().unwrap();
         assert_eq!(spending_txs.len(), 2);
         let spending_tx = spending_txs.first().unwrap();

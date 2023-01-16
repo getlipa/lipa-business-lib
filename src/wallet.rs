@@ -88,9 +88,7 @@ impl Wallet {
         Ok(Self { blockchain, wallet })
     }
 
-    pub fn sync_balance(&self) -> LipaResult<Balance> {
-        self.sync()?;
-
+    pub fn get_balance(&self) -> LipaResult<Balance> {
         let wallet = self.wallet.lock().unwrap();
 
         let balance = wallet
@@ -172,8 +170,6 @@ impl Wallet {
         address: Address,
         confirm_in_blocks: u32,
     ) -> LipaResult<Tx> {
-        self.sync()?;
-
         let fee_rate = self
             .blockchain
             .estimate_fee(confirm_in_blocks as usize)
@@ -257,8 +253,6 @@ impl Wallet {
     pub fn get_tx_status(&self, txid: String) -> LipaResult<TxStatus> {
         let txid = Txid::from_str(&txid).map_to_invalid_input("Invalid tx id")?;
 
-        self.sync()?;
-
         let wallet = self.wallet.lock().unwrap();
         Self::get_tx_status_internal(&wallet, txid)
     }
@@ -282,8 +276,6 @@ impl Wallet {
     }
 
     pub fn get_addr(&self) -> LipaResult<String> {
-        self.sync()?;
-
         let wallet = self.wallet.lock().unwrap();
 
         let address = wallet
@@ -320,8 +312,6 @@ impl Wallet {
             ));
         }
         drop(wallet); // To release the lock.
-
-        self.sync()?;
 
         let fee_rate = self
             .blockchain

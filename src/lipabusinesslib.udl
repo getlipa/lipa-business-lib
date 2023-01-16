@@ -110,13 +110,16 @@ interface Wallet {
     [Throws=LipaError]
     constructor(Config config);
 
-    // Syncs with Electrum to update the local database
+    // Syncs the local database with Electrum
     [Throws=LipaError]
     void sync();
 
-    // Syncs with Electrum to get the current balance of the wallet.
+    // Get the current balance of the wallet.
+    //
+    // The balance is obtained from the local database. To have the balance be up-to-date, the method `sync()` should be
+    // called  beforehand.
     [Throws=LipaError]
-    Balance sync_balance();
+    Balance get_balance();
 
     // Get an unused P2WPKH address from the local wallet
     [Throws=LipaError]
@@ -140,6 +143,9 @@ interface Wallet {
     TxDetails sign_and_broadcast_tx(sequence<u8> tx_blob, string spend_descriptor);
 
     // Returns the status of a tx given its tx id.
+    //
+    // The status is obtained from the local database. To have the status be up-to-date, the method `sync()` should be
+    // called  beforehand.
     [Throws=LipaError]
     TxStatus get_tx_status(string txid);
 
