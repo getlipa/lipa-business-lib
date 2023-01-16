@@ -110,6 +110,10 @@ interface Wallet {
     [Throws=LipaError]
     constructor(Config config);
 
+    // Syncs with Electrum to update the local database
+    [Throws=LipaError]
+    void sync();
+
     // Syncs with Electrum to get the current balance of the wallet.
     [Throws=LipaError]
     Balance sync_balance();
@@ -142,6 +146,9 @@ interface Wallet {
     // Returns a list of all txs that have been sent out from the local wallet.
     // The list is sorted from newest (unconfirmed) txs to txs with higher number of confirmations,
     // and by tx id if number of confirmations is the same.
+    //
+    // The list is obtained from the local database. To have the list be up-to-date, the method `sync()` should be
+    // called  beforehand.
     [Throws=LipaError]
     sequence<TxDetails> get_spending_txs();
 

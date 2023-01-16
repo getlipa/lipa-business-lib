@@ -172,7 +172,7 @@ impl Wallet {
         address: Address,
         confirm_in_blocks: u32,
     ) -> LipaResult<Tx> {
-        let tip_height = self.sync()?;
+        self.sync()?;
 
         let fee_rate = self
             .blockchain
@@ -184,7 +184,7 @@ impl Wallet {
 
         let wallet = self.wallet.lock().unwrap();
 
-        let confirmed_utxo_outpoints = Self::get_confirmed_utxo_outpoints(&wallet, tip_height)?;
+        let confirmed_utxo_outpoints = Self::get_confirmed_utxo_outpoints(&wallet)?;
 
         let mut tx_builder = wallet.build_tx();
 
@@ -244,27 +244,26 @@ impl Wallet {
             "Failed to broadcast tx",
         )?;
 
-        let tip_height = self.sync()?;
+        self.sync()?;
         let wallet = self.wallet.lock().unwrap();
         let include_raw = true;
         let tx = wallet
             .get_tx(&tx.txid(), include_raw)
             .map_to_permanent_failure("Failed to get tx from the wallet")?
             .ok_or_else(|| permanent_failure("Just signed tx not found"))?;
-        Self::map_to_tx_details(tx, &wallet, tip_height)
+        Self::map_to_tx_details(tx, &wallet)
     }
 
     pub fn get_tx_status(&self, txid: String) -> LipaResult<TxStatus> {
         let txid = Txid::from_str(&txid).map_to_invalid_input("Invalid tx id")?;
 
-        let tip_height = self.sync()?;
+        self.sync()?;
 
         let wallet = self.wallet.lock().unwrap();
-        Self::get_tx_status_internal(&wallet, txid, tip_height)
+        Self::get_tx_status_internal(&wallet, txid)
     }
 
     pub fn get_spending_txs(&self) -> LipaResult<Vec<TxDetails>> {
-        let tip_height = self.sync()?;
         let wallet = self.wallet.lock().unwrap();
 
         let include_raw = true;
@@ -275,7 +274,7 @@ impl Wallet {
             // If we send more than receive (plus fee) it means that there is at
             // least one foreign output.
             .filter(|tx| tx.sent > tx.received + tx.fee.unwrap_or(0))
-            .map(|tx| Self::map_to_tx_details(tx, &wallet, tip_height));
+            .map(|tx| Self::map_to_tx_details(tx, &wallet));
 
         let mut txs_details = try_collect(txs_details)?;
         txs_details.sort_unstable_by_key(|tx| (tx.status.clone(), tx.id.clone()));
@@ -322,7 +321,7 @@ impl Wallet {
         }
         drop(wallet); // To release the lock.
 
-        let tip_height = self.sync()?;
+        self.sync()?;
 
         let fee_rate = self
             .blockchain
@@ -334,7 +333,7 @@ impl Wallet {
 
         let wallet = self.wallet.lock().unwrap();
 
-        let confirmed_utxo_outpoints = Self::get_confirmed_utxo_outpoints(&wallet, tip_height)?;
+        let confirmed_utxo_outpoints = Self::get_confirmed_utxo_outpoints(&wallet)?;
 
         let mut tx_builder = wallet.build_tx();
 
@@ -365,11 +364,8 @@ impl Wallet {
         Ok(tx)
     }
 
-    fn get_tx_status_internal(
-        wallet: &bdk::Wallet<Tree>,
-        txid: Txid,
-        tip_height: u32,
-    ) -> LipaResult<TxStatus> {
+    fn get_tx_status_internal(wallet: &bdk::Wallet<Tree>, txid: Txid) -> LipaResult<TxStatus> {
+        let tip_height = Self::get_synced_tip_height(wallet)?;
         let include_raw = false;
         let tx = wallet
             .get_tx(&txid, include_raw)
@@ -377,7 +373,7 @@ impl Wallet {
         Ok(Self::to_tx_status(tx, tip_height))
     }
 
-    fn sync(&self) -> LipaResult<u32> {
+    pub fn sync(&self) -> LipaResult<()> {
         let wallet = self.wallet.lock().unwrap();
         wallet
             .sync(&self.blockchain, SyncOptions::default())
@@ -390,19 +386,21 @@ impl Wallet {
                     RuntimeErrorCode::GenericError,
                     "Failed to sync the BDK wallet",
                 ),
-            })?;
-        let sync_time = wallet
+            })
+    }
+
+    fn get_synced_tip_height(wallet: &BdkWallet) -> LipaResult<u32> {
+        match wallet
             .database()
             .get_sync_time()
             .map_to_permanent_failure("Failed to get sync time")?
-            .ok_or_else(|| permanent_failure("Sync time is empty for synced wallet"))?;
-        Ok(sync_time.block_time.height)
+        {
+            Some(sync_time) => Ok(sync_time.block_time.height),
+            None => Ok(0),
+        }
     }
 
-    fn get_confirmed_utxo_outpoints(
-        wallet: &bdk::Wallet<Tree>,
-        tip_height: u32,
-    ) -> LipaResult<Vec<OutPoint>> {
+    fn get_confirmed_utxo_outpoints(wallet: &bdk::Wallet<Tree>) -> LipaResult<Vec<OutPoint>> {
         let mut confirmed_utxo_outpoints: Vec<OutPoint> = Vec::new();
 
         for utxo in wallet
@@ -410,7 +408,7 @@ impl Wallet {
             .map_to_permanent_failure("Failed to list UTXOs")?
         {
             let txid = utxo.outpoint.txid;
-            match Self::get_tx_status_internal(wallet, txid, tip_height)? {
+            match Self::get_tx_status_internal(wallet, txid)? {
                 TxStatus::NotInMempool => {}
                 TxStatus::InMempool => {}
                 TxStatus::Confirmed { .. } => {
@@ -422,11 +420,9 @@ impl Wallet {
         Ok(confirmed_utxo_outpoints)
     }
 
-    fn map_to_tx_details(
-        tx: TransactionDetails,
-        wallet: &BdkWallet,
-        tip_height: u32,
-    ) -> LipaResult<TxDetails> {
+    fn map_to_tx_details(tx: TransactionDetails, wallet: &BdkWallet) -> LipaResult<TxDetails> {
+        let tip_height = Self::get_synced_tip_height(wallet)?;
+
         let raw_tx = tx
             .transaction
             .as_ref()
