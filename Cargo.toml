@@ -11,13 +11,13 @@ name = "uniffi_lipabusinesslib"
 nigiri = ["simplelog"]
 
 [dependencies]
-uniffi = "0.21.0"
+uniffi = "0.22.0"
 thiserror = "1.0.38"
 log = "0.4.17"
 bdk = { version = "0.26.0", features = ["keys-bip39"] }
 rand = "0.8.5"
 # Explicitly depend on secp256k1 for secp256k1::SECP256K1.
-secp256k1 = { version = "0.24.1", features = ["global-context"] }
+secp256k1 = { version = "0.24.3", features = ["global-context"] }
 sled = "0.34.7"
 
 simplelog = { version ="0.12.0", features = ["test"], optional = true }
@@ -30,4 +30,4 @@ android_logger = "0.11"
 
 [build-dependencies]
 camino = "1.1.1"
-uniffi_bindgen = "0.21.0"
+uniffi_bindgen = "0.22.0"
