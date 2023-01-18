@@ -6,7 +6,12 @@ pub struct Auth {
 }
 
 impl Auth {
-    pub fn new(auth_level: AuthLevel, wallet_keypair: KeyPair, auth_keypair: KeyPair) -> Self {
+    pub fn new(
+        backend_url: String,
+        auth_level: AuthLevel,
+        wallet_keypair: KeyPair,
+        auth_keypair: KeyPair,
+    ) -> Self {
         let wallet_keypair = authors::secrets::KeyPair {
             secret_key: wallet_keypair.secret_key,
             public_key: wallet_keypair.public_key,
@@ -16,7 +21,7 @@ impl Auth {
             public_key: auth_keypair.public_key,
         };
         Auth {
-            auth: authors::Auth::new(auth_level, wallet_keypair, auth_keypair),
+            auth: authors::Auth::new(backend_url, auth_level, wallet_keypair, auth_keypair),
         }
     }
 

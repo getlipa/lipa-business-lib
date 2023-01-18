@@ -1,63 +1,9 @@
+use crate::graphql::*;
 use crate::secrets::KeyPair;
 use crate::signing::sign;
+
 use graphql_client::reqwest::post_graphql_blocking;
-use graphql_client::GraphQLQuery;
 use reqwest::blocking::Client;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/schema_wallet_read.graphql",
-    query_path = "src/operations.graphql",
-    response_derives = "Debug"
-)]
-pub struct RequestChallenge;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/schema_wallet_read.graphql",
-    query_path = "src/operations.graphql",
-    response_derives = "Debug"
-)]
-pub struct StartSession;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/schema_wallet_read.graphql",
-    query_path = "src/operations.graphql",
-    response_derives = "Debug"
-)]
-pub struct PrepareWalletSession;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/schema_wallet_read.graphql",
-    query_path = "src/operations.graphql",
-    response_derives = "Debug"
-)]
-pub struct UnlockWallet;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/schema_wallet_read.graphql",
-    query_path = "src/operations.graphql",
-    response_derives = "Debug"
-)]
-pub struct RefreshSession;
-
-#[allow(non_camel_case_types)]
-type timestamptz = u64;
-#[allow(non_camel_case_types)]
-type uuid = String;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/schema_wallet_read.graphql",
-    query_path = "src/operations.graphql",
-    response_derives = "Debug"
-)]
-pub struct GetBusinessOwner;
-
-const GRAPHQL_API_URL: &str = "https://api-test.getlipa.com/v1/graphql";
 
 pub enum AuthLevel {
     Basic,
@@ -66,6 +12,7 @@ pub enum AuthLevel {
 }
 
 pub(crate) struct AuthProvider {
+    backend_url: String,
     client: Client,
     auth_level: AuthLevel,
     wallet_keypair: KeyPair,
@@ -74,12 +21,18 @@ pub(crate) struct AuthProvider {
 }
 
 impl AuthProvider {
-    pub fn new(auth_level: AuthLevel, wallet_keypair: KeyPair, auth_keypair: KeyPair) -> Self {
+    pub fn new(
+        backend_url: String,
+        auth_level: AuthLevel,
+        wallet_keypair: KeyPair,
+        auth_keypair: KeyPair,
+    ) -> Self {
         let client = Client::builder()
             .user_agent("graphql-rust/0.11.0")
             .build()
             .unwrap();
         AuthProvider {
+            backend_url,
             client,
             auth_level,
             wallet_keypair,
@@ -141,7 +94,7 @@ impl AuthProvider {
         };
 
         let response_body =
-            post_graphql_blocking::<StartSession, _>(&self.client, GRAPHQL_API_URL, variables)
+            post_graphql_blocking::<StartSession, _>(&self.client, &self.backend_url, variables)
                 .unwrap();
         // println!("Response body: {:?}", response_body);
         let session_permit = response_body.data.unwrap().start_session_v2.unwrap();
@@ -188,7 +141,7 @@ impl AuthProvider {
             .unwrap();
         let response_body = post_graphql_blocking::<PrepareWalletSession, _>(
             &client_with_token,
-            GRAPHQL_API_URL,
+            &self.backend_url,
             variables,
         )
         .unwrap();
@@ -203,7 +156,7 @@ impl AuthProvider {
         };
         let response_body = post_graphql_blocking::<UnlockWallet, _>(
             &client_with_token,
-            GRAPHQL_API_URL,
+            &self.backend_url,
             variables,
         )
         .unwrap();
@@ -241,7 +194,7 @@ impl AuthProvider {
         };
         let response_body = post_graphql_blocking::<GetBusinessOwner, _>(
             &client_with_token,
-            GRAPHQL_API_URL,
+            &self.backend_url,
             variables,
         )
         .unwrap();
@@ -261,7 +214,7 @@ impl AuthProvider {
         println!("Refreshing session ...");
         let variables = refresh_session::Variables { refresh_token };
         let response_body =
-            post_graphql_blocking::<RefreshSession, _>(&self.client, GRAPHQL_API_URL, variables)
+            post_graphql_blocking::<RefreshSession, _>(&self.client, &self.backend_url, variables)
                 .unwrap();
         // println!("Response body: {:?}", response_body);
         let session_permit = response_body.data.unwrap().refresh_session.unwrap();
@@ -277,9 +230,12 @@ impl AuthProvider {
     fn request_challenge(&self) -> String {
         println!("Requesting challenge ...");
         let variables = request_challenge::Variables {};
-        let response_body =
-            post_graphql_blocking::<RequestChallenge, _>(&self.client, GRAPHQL_API_URL, variables)
-                .unwrap();
+        let response_body = post_graphql_blocking::<RequestChallenge, _>(
+            &self.client,
+            &self.backend_url,
+            variables,
+        )
+        .unwrap();
         let response_data: request_challenge::ResponseData = response_body.data.unwrap();
         response_data.auth_challenge.unwrap()
     }
