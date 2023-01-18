@@ -1,0 +1,56 @@
+# AuthFlow
+
+# Getting requestChallenge for startSession Query
+query RequestChallenge {
+  auth_challenge
+}
+
+mutation StartSession($authPubKey: String!, $challenge: String!, $signedAuthPubKey: String!, $walletPubKey: String!, $challengeSignature: String!) {
+  start_session_v2(
+    authPubKey: $authPubKey
+    challenge: $challenge
+    challengeSignature: $challengeSignature
+    challengeSignatureType: SECP256K1
+    signedAuthPubKey: $signedAuthPubKey
+    walletPubKey: $walletPubKey
+  ) {
+    accessToken
+    refreshToken
+    walletPubKeyId
+  }
+}
+
+mutation RefreshSession($refreshToken: String!) {
+  refresh_session(refreshToken: $refreshToken) {
+    accessToken
+    refreshToken
+  }
+}
+
+query PrepareWalletSession($challenge: String!, $signedChallenge: String!, $walletPubKeyId: String!) {
+  prepare_wallet_session(challenge: $challenge, ownerPubKeyId: $walletPubKeyId, signature: $signedChallenge)
+}
+
+mutation UnlockWallet($challenge: String!, $challengeSignature: String!, $preparedPermissionToken: String!) {
+  start_prepared_session(challenge: $challenge, challengeSignature: $challengeSignature, preparedPermissionToken: $preparedPermissionToken, challengeSignatureType: SECP256K1) {
+    accessToken
+    refreshToken
+  }
+}
+
+# Employee
+
+fragment Employee on wallet_acl {
+    id
+    memberWalletPubKeyId
+    ownerWalletPubKeyId
+    accessExpiresAt
+    displayName
+    role
+}
+
+query GetBusinessOwner($ownerWalletPubKeyId: uuid!) {
+  wallet_acl(where: {memberWalletPubKeyId: {_eq: $ownerWalletPubKeyId}}) {
+    ...Employee
+  }
+}

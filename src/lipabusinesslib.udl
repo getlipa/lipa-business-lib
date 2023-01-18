@@ -218,6 +218,18 @@ dictionary TxDetails {
     TxStatus status;
 };
 
+enum AuthLevel {
+    "Basic",
+    "Owner",
+    "Employee",
+};
+
+interface Auth {
+    constructor(AuthLevel auth_level, KeyPair wallet_keypair, KeyPair auth_keypair);
+
+    string query_token();
+};
+
 namespace lipabusinesslib {
     // Initiate the logger and set the log level.
     void init_native_logger_once(LogLevel min_level);

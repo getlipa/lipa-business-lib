@@ -1,0 +1,23 @@
+enum AuthError {
+    "ServiceUnavailable",
+};
+
+// A key pair with both keys encoded as a hex string.
+dictionary KeyPair {
+    string secret_key;
+    string public_key;
+};
+
+enum AuthLevel {
+    "Basic",
+    "Owner",
+    "Employee",
+}
+
+interface Auth {
+    constructor(AuthLevel level, KeyPair auth_keys, KeyPair wallet_keys);
+
+    // Returns the existent token if valid or refreshs and returns a new one.
+    [Throws=AuthError]
+    string query_token();
+}

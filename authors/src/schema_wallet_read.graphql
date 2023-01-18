@@ -1,0 +1,960 @@
+schema {
+  query: query_root
+  mutation: mutation_root
+  subscription: subscription_root
+}
+
+"""whether this query should be cached (Hasura Cloud only)"""
+directive @cached(
+  """measured in seconds"""
+  ttl: Int! = 60
+
+  """refresh the cache entry"""
+  refresh: Boolean! = false
+) on QUERY
+
+input AcceptWalletPkRequestInput {
+  id: String!
+}
+
+enum ChallengeSignatureType {
+  SECP256K1
+}
+
+scalar DateTime
+
+type SessionPermit {
+  accessToken: String
+  refreshToken: String
+  walletPubKeyId: String
+}
+
+"""
+Boolean expression to compare columns of type "String". All fields are combined with logical 'AND'.
+"""
+input String_comparison_exp {
+  _eq: String
+  _gt: String
+  _gte: String
+
+  """does the column match the given case-insensitive pattern"""
+  _ilike: String
+  _in: [String!]
+
+  """
+  does the column match the given POSIX regular expression, case insensitive
+  """
+  _iregex: String
+  _is_null: Boolean
+
+  """does the column match the given pattern"""
+  _like: String
+  _lt: String
+  _lte: String
+  _neq: String
+
+  """does the column NOT match the given case-insensitive pattern"""
+  _nilike: String
+  _nin: [String!]
+
+  """
+  does the column NOT match the given POSIX regular expression, case insensitive
+  """
+  _niregex: String
+
+  """does the column NOT match the given pattern"""
+  _nlike: String
+
+  """
+  does the column NOT match the given POSIX regular expression, case sensitive
+  """
+  _nregex: String
+
+  """does the column NOT match the given SQL regular expression"""
+  _nsimilar: String
+
+  """
+  does the column match the given POSIX regular expression, case sensitive
+  """
+  _regex: String
+
+  """does the column match the given SQL regular expression"""
+  _similar: String
+}
+
+type TokenContainer {
+  accessToken: String
+  refreshToken: String
+}
+
+type WalletAcl {
+  accessExpiresAt: DateTime
+  displayName: String
+  id: String
+  invitationExpiresAt: DateTime
+  memberWalletPubKeyId: String
+  role: String
+  walletConfiguration: WalletConfiguration
+}
+
+type WalletConfiguration {
+  name: String
+  pubKey: String
+  pubKeyId: String
+}
+
+scalar bpchar
+
+"""
+Boolean expression to compare columns of type "bpchar". All fields are combined with logical 'AND'.
+"""
+input bpchar_comparison_exp {
+  _eq: bpchar
+  _gt: bpchar
+  _gte: bpchar
+
+  """does the column match the given case-insensitive pattern"""
+  _ilike: bpchar
+  _in: [bpchar!]
+
+  """
+  does the column match the given POSIX regular expression, case insensitive
+  """
+  _iregex: bpchar
+  _is_null: Boolean
+
+  """does the column match the given pattern"""
+  _like: bpchar
+  _lt: bpchar
+  _lte: bpchar
+  _neq: bpchar
+
+  """does the column NOT match the given case-insensitive pattern"""
+  _nilike: bpchar
+  _nin: [bpchar!]
+
+  """
+  does the column NOT match the given POSIX regular expression, case insensitive
+  """
+  _niregex: bpchar
+
+  """does the column NOT match the given pattern"""
+  _nlike: bpchar
+
+  """
+  does the column NOT match the given POSIX regular expression, case sensitive
+  """
+  _nregex: bpchar
+
+  """does the column NOT match the given SQL regular expression"""
+  _nsimilar: bpchar
+
+  """
+  does the column match the given POSIX regular expression, case sensitive
+  """
+  _regex: bpchar
+
+  """does the column match the given SQL regular expression"""
+  _similar: bpchar
+}
+
+scalar bytea
+
+"""
+Boolean expression to compare columns of type "bytea". All fields are combined with logical 'AND'.
+"""
+input bytea_comparison_exp {
+  _eq: bytea
+  _gt: bytea
+  _gte: bytea
+  _in: [bytea!]
+  _is_null: Boolean
+  _lt: bytea
+  _lte: bytea
+  _neq: bytea
+  _nin: [bytea!]
+}
+
+"""
+columns and relationships of "channel_manager"
+"""
+type channel_manager {
+  encryptedChannelManager: bytea!
+  timestamp: timestamptz!
+  walletId: uuid!
+}
+
+"""
+Boolean expression to filter rows from the table "channel_manager". All fields are combined with a logical 'AND'.
+"""
+input channel_manager_bool_exp {
+  _and: [channel_manager_bool_exp!]
+  _not: channel_manager_bool_exp
+  _or: [channel_manager_bool_exp!]
+  encryptedChannelManager: bytea_comparison_exp
+  timestamp: timestamptz_comparison_exp
+  walletId: uuid_comparison_exp
+}
+
+"""
+unique or primary key constraints on table "channel_manager"
+"""
+enum channel_manager_constraint {
+  """
+  unique or primary key constraint on columns "timestamp", "walletId"
+  """
+  channel_manager_pkey
+}
+
+"""
+input type for inserting data into table "channel_manager"
+"""
+input channel_manager_insert_input {
+  encryptedChannelManager: bytea
+  timestamp: timestamptz
+}
+
+"""
+response of any mutation on the table "channel_manager"
+"""
+type channel_manager_mutation_response {
+  """number of rows affected by the mutation"""
+  affected_rows: Int!
+
+  """data from the rows affected by the mutation"""
+  returning: [channel_manager!]!
+}
+
+"""
+on_conflict condition type for table "channel_manager"
+"""
+input channel_manager_on_conflict {
+  constraint: channel_manager_constraint!
+  update_columns: [channel_manager_update_column!]! = []
+  where: channel_manager_bool_exp
+}
+
+"""Ordering options when selecting data from "channel_manager"."""
+input channel_manager_order_by {
+  encryptedChannelManager: order_by
+  timestamp: order_by
+  walletId: order_by
+}
+
+"""
+select columns of table "channel_manager"
+"""
+enum channel_manager_select_column {
+  """column name"""
+  encryptedChannelManager
+
+  """column name"""
+  timestamp
+
+  """column name"""
+  walletId
+}
+
+"""
+Streaming cursor of the table "channel_manager"
+"""
+input channel_manager_stream_cursor_input {
+  """Stream column input with initial value"""
+  initial_value: channel_manager_stream_cursor_value_input!
+
+  """cursor ordering"""
+  ordering: cursor_ordering
+}
+
+"""Initial value of the column from where the streaming should start"""
+input channel_manager_stream_cursor_value_input {
+  encryptedChannelManager: bytea
+  timestamp: timestamptz
+  walletId: uuid
+}
+
+"""
+placeholder for update columns of table "channel_manager" (current role has no relevant permissions)
+"""
+enum channel_manager_update_column {
+  """placeholder (do not use)"""
+  _PLACEHOLDER
+}
+
+"""
+columns and relationships of "channel_monitor"
+"""
+type channel_monitor {
+  channelId: bytea!
+  encryptedChannelMonitor: bytea!
+  encryptedDeviceInfo: bytea!
+  installationId: String!
+  timestamp: timestamptz!
+  walletId: uuid!
+}
+
+"""
+Boolean expression to filter rows from the table "channel_monitor". All fields are combined with a logical 'AND'.
+"""
+input channel_monitor_bool_exp {
+  _and: [channel_monitor_bool_exp!]
+  _not: channel_monitor_bool_exp
+  _or: [channel_monitor_bool_exp!]
+  channelId: bytea_comparison_exp
+  encryptedChannelMonitor: bytea_comparison_exp
+  encryptedDeviceInfo: bytea_comparison_exp
+  installationId: String_comparison_exp
+  timestamp: timestamptz_comparison_exp
+  walletId: uuid_comparison_exp
+}
+
+"""
+unique or primary key constraints on table "channel_monitor"
+"""
+enum channel_monitor_constraint {
+  """
+  unique or primary key constraint on columns "timestamp", "channelId", "walletId"
+  """
+  channel_monitor_pkey
+}
+
+"""
+input type for inserting data into table "channel_monitor"
+"""
+input channel_monitor_insert_input {
+  channelId: bytea
+  encryptedChannelMonitor: bytea
+  encryptedDeviceInfo: bytea
+  installationId: String
+  timestamp: timestamptz
+}
+
+"""
+response of any mutation on the table "channel_monitor"
+"""
+type channel_monitor_mutation_response {
+  """number of rows affected by the mutation"""
+  affected_rows: Int!
+
+  """data from the rows affected by the mutation"""
+  returning: [channel_monitor!]!
+}
+
+"""
+on_conflict condition type for table "channel_monitor"
+"""
+input channel_monitor_on_conflict {
+  constraint: channel_monitor_constraint!
+  update_columns: [channel_monitor_update_column!]! = []
+  where: channel_monitor_bool_exp
+}
+
+"""Ordering options when selecting data from "channel_monitor"."""
+input channel_monitor_order_by {
+  channelId: order_by
+  encryptedChannelMonitor: order_by
+  encryptedDeviceInfo: order_by
+  installationId: order_by
+  timestamp: order_by
+  walletId: order_by
+}
+
+"""
+select columns of table "channel_monitor"
+"""
+enum channel_monitor_select_column {
+  """column name"""
+  channelId
+
+  """column name"""
+  encryptedChannelMonitor
+
+  """column name"""
+  encryptedDeviceInfo
+
+  """column name"""
+  installationId
+
+  """column name"""
+  timestamp
+
+  """column name"""
+  walletId
+}
+
+"""
+Streaming cursor of the table "channel_monitor"
+"""
+input channel_monitor_stream_cursor_input {
+  """Stream column input with initial value"""
+  initial_value: channel_monitor_stream_cursor_value_input!
+
+  """cursor ordering"""
+  ordering: cursor_ordering
+}
+
+"""Initial value of the column from where the streaming should start"""
+input channel_monitor_stream_cursor_value_input {
+  channelId: bytea
+  encryptedChannelMonitor: bytea
+  encryptedDeviceInfo: bytea
+  installationId: String
+  timestamp: timestamptz
+  walletId: uuid
+}
+
+"""
+placeholder for update columns of table "channel_monitor" (current role has no relevant permissions)
+"""
+enum channel_monitor_update_column {
+  """placeholder (do not use)"""
+  _PLACEHOLDER
+}
+
+"""
+columns and relationships of "country"
+"""
+type country {
+  callingCode: String!
+  countryCode: String!
+  currencyCode: bpchar!
+  currencyName: String!
+  name: String!
+}
+
+"""
+Boolean expression to filter rows from the table "country". All fields are combined with a logical 'AND'.
+"""
+input country_bool_exp {
+  _and: [country_bool_exp!]
+  _not: country_bool_exp
+  _or: [country_bool_exp!]
+  callingCode: String_comparison_exp
+  countryCode: String_comparison_exp
+  currencyCode: bpchar_comparison_exp
+  currencyName: String_comparison_exp
+  name: String_comparison_exp
+}
+
+"""Ordering options when selecting data from "country"."""
+input country_order_by {
+  callingCode: order_by
+  countryCode: order_by
+  currencyCode: order_by
+  currencyName: order_by
+  name: order_by
+}
+
+"""
+select columns of table "country"
+"""
+enum country_select_column {
+  """column name"""
+  callingCode
+
+  """column name"""
+  countryCode
+
+  """column name"""
+  currencyCode
+
+  """column name"""
+  currencyName
+
+  """column name"""
+  name
+}
+
+"""
+Streaming cursor of the table "country"
+"""
+input country_stream_cursor_input {
+  """Stream column input with initial value"""
+  initial_value: country_stream_cursor_value_input!
+
+  """cursor ordering"""
+  ordering: cursor_ordering
+}
+
+"""Initial value of the column from where the streaming should start"""
+input country_stream_cursor_value_input {
+  callingCode: String
+  countryCode: String
+  currencyCode: bpchar
+  currencyName: String
+  name: String
+}
+
+"""ordering argument of a cursor"""
+enum cursor_ordering {
+  """ascending ordering of the cursor"""
+  ASC
+
+  """descending ordering of the cursor"""
+  DESC
+}
+
+"""mutation root"""
+type mutation_root {
+  accept_wallet_acl_by_pk(pk_columns: AcceptWalletPkRequestInput!): WalletAcl
+
+  """
+  delete data from the table: "channel_manager"
+  """
+  delete_channel_manager(
+    """filter the rows which have to be deleted"""
+    where: channel_manager_bool_exp!
+  ): channel_manager_mutation_response
+
+  """
+  delete single row from the table: "channel_manager"
+  """
+  delete_channel_manager_by_pk(timestamp: timestamptz!, walletId: uuid!): channel_manager
+
+  """
+  delete data from the table: "channel_monitor"
+  """
+  delete_channel_monitor(
+    """filter the rows which have to be deleted"""
+    where: channel_monitor_bool_exp!
+  ): channel_monitor_mutation_response
+
+  """
+  delete single row from the table: "channel_monitor"
+  """
+  delete_channel_monitor_by_pk(channelId: bytea!, timestamp: timestamptz!, walletId: uuid!): channel_monitor
+
+  """
+  insert data into the table: "channel_manager"
+  """
+  insert_channel_manager(
+    """the rows to be inserted"""
+    objects: [channel_manager_insert_input!]!
+
+    """upsert condition"""
+    on_conflict: channel_manager_on_conflict
+  ): channel_manager_mutation_response
+
+  """
+  insert a single row into the table: "channel_manager"
+  """
+  insert_channel_manager_one(
+    """the row to be inserted"""
+    object: channel_manager_insert_input!
+
+    """upsert condition"""
+    on_conflict: channel_manager_on_conflict
+  ): channel_manager
+
+  """
+  insert data into the table: "channel_monitor"
+  """
+  insert_channel_monitor(
+    """the rows to be inserted"""
+    objects: [channel_monitor_insert_input!]!
+
+    """upsert condition"""
+    on_conflict: channel_monitor_on_conflict
+  ): channel_monitor_mutation_response
+
+  """
+  insert a single row into the table: "channel_monitor"
+  """
+  insert_channel_monitor_one(
+    """the row to be inserted"""
+    object: channel_monitor_insert_input!
+
+    """upsert condition"""
+    on_conflict: channel_monitor_on_conflict
+  ): channel_monitor
+  refresh_session(refreshToken: String!): TokenContainer
+  refresh_session_v2(refreshToken: String!): SessionPermit
+  start_prepared_session(challenge: String!, challengeSignature: String!, challengeSignatureType: ChallengeSignatureType, preparedPermissionToken: String!): TokenContainer
+  start_prepared_session_v2(challenge: String!, challengeSignature: String!, challengeSignatureType: ChallengeSignatureType, preparedPermissionToken: String!): SessionPermit
+  start_session(authPubKey: String!, challenge: String!, challengeSignature: String!, challengeSignatureType: ChallengeSignatureType, signedAuthPubKey: String!, walletPubKey: String!): TokenContainer
+  start_session_v2(authPubKey: String!, challenge: String!, challengeSignature: String!, challengeSignatureType: ChallengeSignatureType, signedAuthPubKey: String!, walletPubKey: String!): SessionPermit
+}
+
+"""column ordering options"""
+enum order_by {
+  """in ascending order, nulls last"""
+  asc
+
+  """in ascending order, nulls first"""
+  asc_nulls_first
+
+  """in ascending order, nulls last"""
+  asc_nulls_last
+
+  """in descending order, nulls first"""
+  desc
+
+  """in descending order, nulls first"""
+  desc_nulls_first
+
+  """in descending order, nulls last"""
+  desc_nulls_last
+}
+
+type query_root {
+  auth_challenge: String
+
+  """
+  fetch data from the table: "channel_manager"
+  """
+  channel_manager(
+    """distinct select on columns"""
+    distinct_on: [channel_manager_select_column!]
+
+    """limit the number of rows returned"""
+    limit: Int
+
+    """skip the first n rows. Use only with order_by"""
+    offset: Int
+
+    """sort the rows by one or more columns"""
+    order_by: [channel_manager_order_by!]
+
+    """filter the rows returned"""
+    where: channel_manager_bool_exp
+  ): [channel_manager!]!
+
+  """fetch data from the table: "channel_manager" using primary key columns"""
+  channel_manager_by_pk(timestamp: timestamptz!, walletId: uuid!): channel_manager
+
+  """
+  fetch data from the table: "channel_monitor"
+  """
+  channel_monitor(
+    """distinct select on columns"""
+    distinct_on: [channel_monitor_select_column!]
+
+    """limit the number of rows returned"""
+    limit: Int
+
+    """skip the first n rows. Use only with order_by"""
+    offset: Int
+
+    """sort the rows by one or more columns"""
+    order_by: [channel_monitor_order_by!]
+
+    """filter the rows returned"""
+    where: channel_monitor_bool_exp
+  ): [channel_monitor!]!
+
+  """fetch data from the table: "channel_monitor" using primary key columns"""
+  channel_monitor_by_pk(channelId: bytea!, timestamp: timestamptz!, walletId: uuid!): channel_monitor
+
+  """
+  fetch data from the table: "country"
+  """
+  country(
+    """distinct select on columns"""
+    distinct_on: [country_select_column!]
+
+    """limit the number of rows returned"""
+    limit: Int
+
+    """skip the first n rows. Use only with order_by"""
+    offset: Int
+
+    """sort the rows by one or more columns"""
+    order_by: [country_order_by!]
+
+    """filter the rows returned"""
+    where: country_bool_exp
+  ): [country!]!
+
+  """fetch data from the table: "country" using primary key columns"""
+  country_by_pk(countryCode: String!): country
+  prepare_wallet_session(challenge: String!, ownerPubKeyId: String!, signature: String!): String
+
+  """
+  fetch data from the table: "wallet_acl"
+  """
+  wallet_acl(
+    """distinct select on columns"""
+    distinct_on: [wallet_acl_select_column!]
+
+    """limit the number of rows returned"""
+    limit: Int
+
+    """skip the first n rows. Use only with order_by"""
+    offset: Int
+
+    """sort the rows by one or more columns"""
+    order_by: [wallet_acl_order_by!]
+
+    """filter the rows returned"""
+    where: wallet_acl_bool_exp
+  ): [wallet_acl!]!
+
+  """fetch data from the table: "wallet_acl" using primary key columns"""
+  wallet_acl_by_pk(id: uuid!): wallet_acl
+}
+
+type subscription_root {
+  """
+  fetch data from the table: "channel_manager"
+  """
+  channel_manager(
+    """distinct select on columns"""
+    distinct_on: [channel_manager_select_column!]
+
+    """limit the number of rows returned"""
+    limit: Int
+
+    """skip the first n rows. Use only with order_by"""
+    offset: Int
+
+    """sort the rows by one or more columns"""
+    order_by: [channel_manager_order_by!]
+
+    """filter the rows returned"""
+    where: channel_manager_bool_exp
+  ): [channel_manager!]!
+
+  """fetch data from the table: "channel_manager" using primary key columns"""
+  channel_manager_by_pk(timestamp: timestamptz!, walletId: uuid!): channel_manager
+
+  """
+  fetch data from the table in a streaming manner: "channel_manager"
+  """
+  channel_manager_stream(
+    """maximum number of rows returned in a single batch"""
+    batch_size: Int!
+
+    """cursor to stream the results returned by the query"""
+    cursor: [channel_manager_stream_cursor_input]!
+
+    """filter the rows returned"""
+    where: channel_manager_bool_exp
+  ): [channel_manager!]!
+
+  """
+  fetch data from the table: "channel_monitor"
+  """
+  channel_monitor(
+    """distinct select on columns"""
+    distinct_on: [channel_monitor_select_column!]
+
+    """limit the number of rows returned"""
+    limit: Int
+
+    """skip the first n rows. Use only with order_by"""
+    offset: Int
+
+    """sort the rows by one or more columns"""
+    order_by: [channel_monitor_order_by!]
+
+    """filter the rows returned"""
+    where: channel_monitor_bool_exp
+  ): [channel_monitor!]!
+
+  """fetch data from the table: "channel_monitor" using primary key columns"""
+  channel_monitor_by_pk(channelId: bytea!, timestamp: timestamptz!, walletId: uuid!): channel_monitor
+
+  """
+  fetch data from the table in a streaming manner: "channel_monitor"
+  """
+  channel_monitor_stream(
+    """maximum number of rows returned in a single batch"""
+    batch_size: Int!
+
+    """cursor to stream the results returned by the query"""
+    cursor: [channel_monitor_stream_cursor_input]!
+
+    """filter the rows returned"""
+    where: channel_monitor_bool_exp
+  ): [channel_monitor!]!
+
+  """
+  fetch data from the table: "country"
+  """
+  country(
+    """distinct select on columns"""
+    distinct_on: [country_select_column!]
+
+    """limit the number of rows returned"""
+    limit: Int
+
+    """skip the first n rows. Use only with order_by"""
+    offset: Int
+
+    """sort the rows by one or more columns"""
+    order_by: [country_order_by!]
+
+    """filter the rows returned"""
+    where: country_bool_exp
+  ): [country!]!
+
+  """fetch data from the table: "country" using primary key columns"""
+  country_by_pk(countryCode: String!): country
+
+  """
+  fetch data from the table in a streaming manner: "country"
+  """
+  country_stream(
+    """maximum number of rows returned in a single batch"""
+    batch_size: Int!
+
+    """cursor to stream the results returned by the query"""
+    cursor: [country_stream_cursor_input]!
+
+    """filter the rows returned"""
+    where: country_bool_exp
+  ): [country!]!
+
+  """
+  fetch data from the table: "wallet_acl"
+  """
+  wallet_acl(
+    """distinct select on columns"""
+    distinct_on: [wallet_acl_select_column!]
+
+    """limit the number of rows returned"""
+    limit: Int
+
+    """skip the first n rows. Use only with order_by"""
+    offset: Int
+
+    """sort the rows by one or more columns"""
+    order_by: [wallet_acl_order_by!]
+
+    """filter the rows returned"""
+    where: wallet_acl_bool_exp
+  ): [wallet_acl!]!
+
+  """fetch data from the table: "wallet_acl" using primary key columns"""
+  wallet_acl_by_pk(id: uuid!): wallet_acl
+
+  """
+  fetch data from the table in a streaming manner: "wallet_acl"
+  """
+  wallet_acl_stream(
+    """maximum number of rows returned in a single batch"""
+    batch_size: Int!
+
+    """cursor to stream the results returned by the query"""
+    cursor: [wallet_acl_stream_cursor_input]!
+
+    """filter the rows returned"""
+    where: wallet_acl_bool_exp
+  ): [wallet_acl!]!
+}
+
+scalar timestamptz
+
+"""
+Boolean expression to compare columns of type "timestamptz". All fields are combined with logical 'AND'.
+"""
+input timestamptz_comparison_exp {
+  _eq: timestamptz
+  _gt: timestamptz
+  _gte: timestamptz
+  _in: [timestamptz!]
+  _is_null: Boolean
+  _lt: timestamptz
+  _lte: timestamptz
+  _neq: timestamptz
+  _nin: [timestamptz!]
+}
+
+scalar uuid
+
+"""
+Boolean expression to compare columns of type "uuid". All fields are combined with logical 'AND'.
+"""
+input uuid_comparison_exp {
+  _eq: uuid
+  _gt: uuid
+  _gte: uuid
+  _in: [uuid!]
+  _is_null: Boolean
+  _lt: uuid
+  _lte: uuid
+  _neq: uuid
+  _nin: [uuid!]
+}
+
+"""
+columns and relationships of "wallet_acl"
+"""
+type wallet_acl {
+  accessExpiresAt: timestamptz
+  displayName: String!
+  id: uuid!
+  memberWalletPubKeyId: uuid
+  ownerWalletPubKeyId: uuid!
+  role: String!
+}
+
+"""
+Boolean expression to filter rows from the table "wallet_acl". All fields are combined with a logical 'AND'.
+"""
+input wallet_acl_bool_exp {
+  _and: [wallet_acl_bool_exp!]
+  _not: wallet_acl_bool_exp
+  _or: [wallet_acl_bool_exp!]
+  accessExpiresAt: timestamptz_comparison_exp
+  displayName: String_comparison_exp
+  id: uuid_comparison_exp
+  memberWalletPubKeyId: uuid_comparison_exp
+  ownerWalletPubKeyId: uuid_comparison_exp
+  role: String_comparison_exp
+}
+
+"""Ordering options when selecting data from "wallet_acl"."""
+input wallet_acl_order_by {
+  accessExpiresAt: order_by
+  displayName: order_by
+  id: order_by
+  memberWalletPubKeyId: order_by
+  ownerWalletPubKeyId: order_by
+  role: order_by
+}
+
+"""
+select columns of table "wallet_acl"
+"""
+enum wallet_acl_select_column {
+  """column name"""
+  accessExpiresAt
+
+  """column name"""
+  displayName
+
+  """column name"""
+  id
+
+  """column name"""
+  memberWalletPubKeyId
+
+  """column name"""
+  ownerWalletPubKeyId
+
+  """column name"""
+  role
+}
+
+"""
+Streaming cursor of the table "wallet_acl"
+"""
+input wallet_acl_stream_cursor_input {
+  """Stream column input with initial value"""
+  initial_value: wallet_acl_stream_cursor_value_input!
+
+  """cursor ordering"""
+  ordering: cursor_ordering
+}
+
+"""Initial value of the column from where the streaming should start"""
+input wallet_acl_stream_cursor_value_input {
+  accessExpiresAt: timestamptz
+  displayName: String
+  id: uuid
+  memberWalletPubKeyId: uuid
+  ownerWalletPubKeyId: uuid
+  role: String
+}
+

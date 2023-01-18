@@ -1,9 +1,11 @@
+mod auth;
 mod errors;
 mod native_logger;
 mod secrets;
 mod signing;
 mod wallet;
 
+pub use crate::auth::Auth;
 pub use crate::errors::{LipaError, RuntimeErrorCode};
 pub use crate::native_logger::init_native_logger_once;
 pub use crate::secrets::{
@@ -11,6 +13,8 @@ pub use crate::secrets::{
 };
 pub use crate::signing::sign;
 pub use crate::wallet::{AddressValidationResult, Config, Tx, TxDetails, TxStatus, Wallet};
+
+pub use authors::AuthLevel;
 
 use bdk::bitcoin::Network;
 use bdk::Balance;
