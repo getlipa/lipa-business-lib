@@ -6,7 +6,7 @@ mod signing;
 mod wallet;
 
 pub use crate::auth::Auth;
-pub use crate::errors::{LipaError, RuntimeErrorCode};
+pub use crate::errors::{LblError, LblRuntimeErrorCode};
 pub use crate::native_logger::init_native_logger_once;
 pub use crate::secrets::{
     derive_keys, generate_keypair, generate_mnemonic, Descriptors, KeyPair, WalletKeys,

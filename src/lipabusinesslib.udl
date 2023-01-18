@@ -21,7 +21,7 @@ enum LogLevel {
 };
 
 // A code that specifies the RuntimError that ocurred
-enum RuntimeErrorCode {
+enum LblRuntimeErrorCode {
     "ElectrumServiceUnavailable", // The electrum service is unavailable. Could there be a loss of internet connection?
     "NotEnoughFunds", // There are not enough funds to create the tx that was requested
     "RemoteServiceUnavailable", // A remote service is unavailable. Could there be a loss of internet connection?
@@ -30,14 +30,14 @@ enum RuntimeErrorCode {
 };
 
 [Error]
-interface LipaError {
+interface LblError {
     // Invalid input.
     // Consider fixing the input and retrying the request.
     InvalidInput(string msg);
 
     // Recoverable problem (e.g. network issue, problem with en external service).
     // Consider retrying the request.
-    RuntimeError(RuntimeErrorCode code, string msg);
+    RuntimeError(LblRuntimeErrorCode code, string msg);
 
     // Unrecoverable problem (e.g. internal invariant broken).
     // Consider suggesting the user to report the issue to the developers.
@@ -107,22 +107,22 @@ enum AddressValidationResult {
 
 interface Wallet {
     // Create a new Wallet instance.
-    [Throws=LipaError]
+    [Throws=LblError]
     constructor(Config config);
 
     // Syncs the local database with Electrum
-    [Throws=LipaError]
+    [Throws=LblError]
     void sync();
 
     // Get the current balance of the wallet.
     //
     // The balance is obtained from the local database. To have the balance be up-to-date, the method `sync()` should be
     // called  beforehand.
-    [Throws=LipaError]
+    [Throws=LblError]
     Balance get_balance();
 
     // Get an unused P2WPKH address from the local wallet
-    [Throws=LipaError]
+    [Throws=LblError]
     string get_addr();
 
     // Validates that an address is valid and the local wallet can send funds to it.
@@ -135,18 +135,18 @@ interface Wallet {
     // * addr - the layer 1 address to send to.
     // * confirm_in_blocks - the target number of blocks used to estimate the on-chain fee.
     //      The lower this number, the higher the fee will be. Must be in the interval [1; 25].
-    [Throws=LipaError]
+    [Throws=LblError]
     Tx prepare_drain_tx(string addr, u32 confirm_in_blocks);
 
     // Signs and broadcasts a provided tx. Requires a spend descriptor to be used to sign the transaction.
-    [Throws=LipaError]
+    [Throws=LblError]
     TxDetails sign_and_broadcast_tx(sequence<u8> tx_blob, string spend_descriptor);
 
     // Returns the status of a tx given its tx id.
     //
     // The status is obtained from the local database. To have the status be up-to-date, the method `sync()` should be
     // called  beforehand.
-    [Throws=LipaError]
+    [Throws=LblError]
     TxStatus get_tx_status(string txid);
 
     // Returns a list of all txs that have been sent out from the local wallet.
@@ -155,7 +155,7 @@ interface Wallet {
     //
     // The list is obtained from the local database. To have the list be up-to-date, the method `sync()` should be
     // called  beforehand.
-    [Throws=LipaError]
+    [Throws=LblError]
     sequence<TxDetails> get_spending_txs();
 
     // Provides an estimation of the local wallet having enough funds for prepare_drain_tx() to be successful.
@@ -164,7 +164,7 @@ interface Wallet {
     // Parameters:
     // * confirm_in_blocks - the target number of blocks used to estimate the on-chain fee. The value that will be
     //      provided later to prepare_drain_tx() should be the same.
-    [Throws=LipaError]
+    [Throws=LblError]
     boolean is_drain_tx_affordable(u32 confirm_in_blocks);
 };
 
@@ -235,15 +235,15 @@ namespace lipabusinesslib {
     void init_native_logger_once(LogLevel min_level);
 
     // Generate a new mnemonic.
-    [Throws=LipaError]
+    [Throws=LblError]
     sequence<string> generate_mnemonic();
 
     // Derives WalletKeys from a mnemonic.
-    [Throws=LipaError]
+    [Throws=LblError]
     WalletKeys derive_keys(Network network, sequence<string> mnemonic_string);
 
     // Signs a message with the provided private_key. Used for authenticating with the backend.
-    [Throws=LipaError]
+    [Throws=LblError]
     string sign(string message, string private_key);
 
     // Generate a new keypair. Used for authentication with the backend.

@@ -5,7 +5,7 @@ use bdk::bitcoin::psbt::Psbt;
 use bdk::bitcoin::{Address, Network, Txid};
 use std::fs::remove_dir_all;
 use std::str::FromStr;
-use uniffi_lipabusinesslib::{Config, LipaError, RuntimeErrorCode, Wallet};
+use uniffi_lipabusinesslib::{Config, LblError, LblRuntimeErrorCode, Wallet};
 
 const WATCH_DESCRIPTOR_WITH_FUNDS: &str = "wpkh([aed2a027/84'/1'/0']tpubDCvyR4gGk5U6r1Q1HMQtgZYMD3a9bVyt7Tv9BWgcBCQsff4aqR7arUGPTMaUbVwaH8TeaK924GJr9nHyGPBtqSCD8BCjMnJb1qZFjK4ACfL/0/*)";
 
@@ -49,8 +49,8 @@ fn test_prepare_drain_tx() {
     assert!(result.is_err());
     assert!(matches!(
         result,
-        Err(LipaError::RuntimeError {
-            code: RuntimeErrorCode::SendToOurselves,
+        Err(LblError::RuntimeError {
+            code: LblRuntimeErrorCode::SendToOurselves,
             ..
         })
     ));
@@ -98,8 +98,8 @@ fn test_drain_empty_wallet() {
     assert!(drain_tx_result.is_err());
     assert!(matches!(
         drain_tx_result,
-        Err(LipaError::RuntimeError {
-            code: RuntimeErrorCode::NotEnoughFunds,
+        Err(LblError::RuntimeError {
+            code: LblRuntimeErrorCode::NotEnoughFunds,
             ..
         })
     ));
