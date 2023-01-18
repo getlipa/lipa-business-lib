@@ -1,4 +1,5 @@
 use crate::KeyPair;
+use authors::errors::AuthResult;
 use authors::AuthLevel;
 
 pub struct Auth {
@@ -11,7 +12,7 @@ impl Auth {
         auth_level: AuthLevel,
         wallet_keypair: KeyPair,
         auth_keypair: KeyPair,
-    ) -> Self {
+    ) -> AuthResult<Self> {
         let wallet_keypair = authors::secrets::KeyPair {
             secret_key: wallet_keypair.secret_key,
             public_key: wallet_keypair.public_key,
@@ -20,12 +21,12 @@ impl Auth {
             secret_key: auth_keypair.secret_key,
             public_key: auth_keypair.public_key,
         };
-        Auth {
-            auth: authors::Auth::new(backend_url, auth_level, wallet_keypair, auth_keypair),
-        }
+        Ok(Auth {
+            auth: authors::Auth::new(backend_url, auth_level, wallet_keypair, auth_keypair)?,
+        })
     }
 
-    pub fn query_token(&self) -> String {
+    pub fn query_token(&self) -> AuthResult<String> {
         self.auth.query_token()
     }
 }

@@ -44,6 +44,25 @@ interface LblError {
     PermanentFailure(string msg);
 };
 
+enum AuthRuntimeErrorCode {
+    "GenericError", // A generic error for unexpected/unknown runtime errors
+};
+
+[Error]
+interface AuthError {
+    // Invalid input.
+    // Consider fixing the input and retrying the request.
+    InvalidInput(string msg);
+
+    // Recoverable problem (e.g. network issue, problem with en external service).
+    // Consider retrying the request.
+    RuntimeError(AuthRuntimeErrorCode code, string msg);
+
+    // Unrecoverable problem (e.g. internal invariant broken).
+    // Consider suggesting the user to report the issue to the developers.
+    PermanentFailure(string msg);
+};
+
 // A key pair with both keys encoded as a hex string.
 dictionary KeyPair {
     string secret_key;
@@ -225,8 +244,10 @@ enum AuthLevel {
 };
 
 interface Auth {
+    [Throws=AuthError]
     constructor(string backend_url, AuthLevel auth_level, KeyPair wallet_keypair, KeyPair auth_keypair);
 
+    [Throws=AuthError]
     string query_token();
 };
 

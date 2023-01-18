@@ -14,7 +14,10 @@ pub use crate::secrets::{
 pub use crate::signing::sign;
 pub use crate::wallet::{AddressValidationResult, Config, Tx, TxDetails, TxStatus, Wallet};
 
-pub use authors::AuthLevel;
+pub use authors::{
+    errors::{AuthError, AuthRuntimeErrorCode},
+    AuthLevel,
+};
 
 use bdk::bitcoin::Network;
 use bdk::Balance;

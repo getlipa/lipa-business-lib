@@ -145,6 +145,40 @@ impl<T, C> MapToLipaErrorForUnitType<T, C> for Result<T, ()> {
     }
 }
 
+pub trait OptionToError<T> {
+    fn ok_or_invalid_input<M: ToString, C: Display + Debug + Eq>(self, msg: M) -> LipaResult<T, C>;
+    fn ok_or_runtime_error<M: ToString, C: Display + Debug + Eq>(
+        self,
+        code: C,
+        msg: M,
+    ) -> LipaResult<T, C>;
+    fn ok_or_permanent_failure<M: ToString, C: Display + Debug + Eq>(
+        self,
+        msg: M,
+    ) -> LipaResult<T, C>;
+}
+
+impl<T> OptionToError<T> for Option<T> {
+    fn ok_or_invalid_input<M: ToString, C: Display + Debug + Eq>(self, msg: M) -> LipaResult<T, C> {
+        self.ok_or_else(|| invalid_input(msg))
+    }
+
+    fn ok_or_runtime_error<M: ToString, C: Display + Debug + Eq>(
+        self,
+        code: C,
+        msg: M,
+    ) -> LipaResult<T, C> {
+        self.ok_or_else(|| runtime_error(code, msg))
+    }
+
+    fn ok_or_permanent_failure<M: ToString, C: Display + Debug + Eq>(
+        self,
+        msg: M,
+    ) -> LipaResult<T, C> {
+        self.ok_or_else(|| permanent_failure(msg))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,5 +253,36 @@ mod tests {
             result.unwrap_err().to_string(),
             "InvalidInput: Invalid amount: Number must be positive"
         );
+    }
+
+    #[test]
+    fn test_ok_or() {
+        assert_eq!(
+            Some(1).ok_or_permanent_failure::<_, TestRuntimeErrorCode>("Value expected"),
+            Ok(1)
+        );
+
+        let none: Option<u32> = None;
+
+        let error = none
+            .ok_or_invalid_input::<_, TestRuntimeErrorCode>("Value expected")
+            .unwrap_err();
+        assert_eq!(error.to_string(), "InvalidInput: Value expected");
+
+        let error = none
+            .ok_or_runtime_error::<_, TestRuntimeErrorCode>(
+                TestRuntimeErrorCode::RemoteServiceUnavailable,
+                "Value expected",
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "RuntimeError: RemoteServiceUnavailable - Value expected"
+        );
+
+        let error = none
+            .ok_or_permanent_failure::<_, TestRuntimeErrorCode>("Value expected")
+            .unwrap_err();
+        assert_eq!(error.to_string(), "PermanentFailure: Value expected");
     }
 }
