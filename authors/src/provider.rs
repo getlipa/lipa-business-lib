@@ -1,8 +1,10 @@
+use crate::errors::AuthResult;
 use crate::graphql::*;
 use crate::secrets::KeyPair;
 use crate::signing::sign;
 
 use graphql_client::reqwest::post_graphql_blocking;
+use lipa_errors::MapToLipaError;
 use reqwest::blocking::Client;
 
 pub enum AuthLevel {
@@ -26,38 +28,38 @@ impl AuthProvider {
         auth_level: AuthLevel,
         wallet_keypair: KeyPair,
         auth_keypair: KeyPair,
-    ) -> Self {
+    ) -> AuthResult<Self> {
         let client = Client::builder()
             .user_agent("graphql-rust/0.11.0")
             .build()
-            .unwrap();
-        AuthProvider {
+            .map_to_permanent_failure("Failed to build a reqwest client")?;
+        Ok(AuthProvider {
             backend_url,
             client,
             auth_level,
             wallet_keypair,
             auth_keypair,
             refresh_token: None,
-        }
+        })
     }
 
-    pub fn query_token(&mut self) -> String {
+    pub fn query_token(&mut self) -> AuthResult<String> {
         let (access_token, refresh_token) = match self.refresh_token.take() {
             Some(refresh_token) => {
                 // TODO: Tolerate invalid refresh token error and fallback to
                 // run_aut_flow().
                 self.refresh_session(refresh_token)
             }
-            None => self.run_auth_flow(),
+            None => self.run_auth_flow()?,
         };
         self.refresh_token = Some(refresh_token);
-        access_token
+        Ok(access_token)
     }
 
-    fn run_auth_flow(&self) -> (String, String) {
-        let (access_token, refresh_token, wallet_pub_key_id) = self.start_basic_session();
+    fn run_auth_flow(&self) -> AuthResult<(String, String)> {
+        let (access_token, refresh_token, wallet_pub_key_id) = self.start_basic_session()?;
 
-        match self.auth_level {
+        Ok(match self.auth_level {
             AuthLevel::Basic => (access_token, refresh_token),
             AuthLevel::Owner => self.start_priviledged_session(access_token, wallet_pub_key_id),
             AuthLevel::Employee => {
@@ -69,10 +71,10 @@ impl AuthProvider {
                     panic!("Employee does not belong to any owner");
                 }
             }
-        }
+        })
     }
 
-    fn start_basic_session(&self) -> (String, String, String) {
+    fn start_basic_session(&self) -> AuthResult<(String, String, String)> {
         let challenge = self.request_challenge();
 
         let challenge_with_prefix = add_bitcoin_message_prefix(&challenge);
@@ -104,7 +106,7 @@ impl AuthProvider {
         println!("access_token: {}", access_token);
         println!("refresh_token: {}", refresh_token);
         println!("wallet_pub_key_id: {}", wallet_pub_key_id);
-        (access_token, refresh_token, wallet_pub_key_id)
+        Ok((access_token, refresh_token, wallet_pub_key_id))
     }
 
     fn start_priviledged_session(

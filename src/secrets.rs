@@ -1,4 +1,4 @@
-use crate::errors::{permanent_failure, LipaResult, MapToLipaError};
+use crate::errors::LblResult;
 use bdk::bitcoin::hashes::hex::ToHex;
 use bdk::bitcoin::secp256k1::PublicKey;
 use bdk::bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, KeySource};
@@ -8,6 +8,7 @@ use bdk::keys::bip39::Mnemonic;
 use bdk::keys::DescriptorKey::Secret;
 use bdk::keys::{DerivableKey, DescriptorKey, ExtendedKey};
 use bdk::miniscript::ToPublicKey;
+use lipa_errors::{permanent_failure, MapToLipaError};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use secp256k1::SECP256K1;
@@ -20,7 +21,7 @@ const BACKEND_AUTH_DERIVATION_PATH: &str = "m";
 const ACCOUNT_DERIVATION_PATH_MAINNET: &str = "m/84'/0'/0'";
 const ACCOUNT_DERIVATION_PATH_TESTNET: &str = "m/84'/1'/0'";
 
-pub fn generate_mnemonic() -> LipaResult<Vec<String>> {
+pub fn generate_mnemonic() -> LblResult<Vec<String>> {
     let entropy = generate_random_bytes()?;
     let mnemonic = Mnemonic::from_entropy(&entropy)
         .map_to_permanent_failure("Failed to get mnemonic from entropy")?;
@@ -30,7 +31,7 @@ pub fn generate_mnemonic() -> LipaResult<Vec<String>> {
     Ok(mnemonic)
 }
 
-fn generate_random_bytes() -> LipaResult<[u8; 32]> {
+fn generate_random_bytes() -> LblResult<[u8; 32]> {
     let mut bytes = [0u8; 32];
     OsRng
         .try_fill_bytes(&mut bytes)
@@ -53,7 +54,7 @@ pub struct WalletKeys {
     pub wallet_descriptors: Descriptors,
 }
 
-pub fn derive_keys(network: Network, mnemonic_string: Vec<String>) -> LipaResult<WalletKeys> {
+pub fn derive_keys(network: Network, mnemonic_string: Vec<String>) -> LblResult<WalletKeys> {
     let mnemonic = Mnemonic::from_str(mnemonic_string.join(" ").as_str())
         .map_to_invalid_input("Invalid mnemonic string")?;
 
@@ -72,7 +73,7 @@ pub fn derive_keys(network: Network, mnemonic_string: Vec<String>) -> LipaResult
     })
 }
 
-fn derive_auth_keypair(master_xpriv: ExtendedPrivKey) -> LipaResult<KeyPair> {
+fn derive_auth_keypair(master_xpriv: ExtendedPrivKey) -> LblResult<KeyPair> {
     let lipa_purpose_path = DerivationPath::from_str(BACKEND_AUTH_DERIVATION_PATH)
         .map_to_permanent_failure("Failed to build derivation path")?;
 
@@ -92,7 +93,7 @@ fn derive_auth_keypair(master_xpriv: ExtendedPrivKey) -> LipaResult<KeyPair> {
     })
 }
 
-fn get_master_xpriv(network: Network, mnemonic: Mnemonic) -> LipaResult<ExtendedPrivKey> {
+fn get_master_xpriv(network: Network, mnemonic: Mnemonic) -> LblResult<ExtendedPrivKey> {
     let master_extended_key: ExtendedKey = mnemonic
         .into_extended_key()
         .map_to_permanent_failure("Failed to get extended key from mnemonic")?;
@@ -103,7 +104,7 @@ fn get_master_xpriv(network: Network, mnemonic: Mnemonic) -> LipaResult<Extended
     Ok(master_xpriv)
 }
 
-fn build_spend_descriptor(network: Network, master_xpriv: ExtendedPrivKey) -> LipaResult<String> {
+fn build_spend_descriptor(network: Network, master_xpriv: ExtendedPrivKey) -> LblResult<String> {
     // Directly embed the master extended key in the descriptor
     let origin_path = "m";
 
@@ -119,7 +120,7 @@ fn build_spend_descriptor(network: Network, master_xpriv: ExtendedPrivKey) -> Li
     )
 }
 
-fn build_watch_descriptor(network: Network, master_xpriv: ExtendedPrivKey) -> LipaResult<String> {
+fn build_watch_descriptor(network: Network, master_xpriv: ExtendedPrivKey) -> LblResult<String> {
     // Embed the account level extended key in the descriptor
     let origin_path = get_account_derivation_path(network);
 
@@ -149,7 +150,7 @@ fn build_descriptor(
     origin_derivation_path: &str,
     key_derivation_path: &str,
     kind: DescriptorKind,
-) -> LipaResult<String> {
+) -> LblResult<String> {
     let extended_key_derivation_path = DerivationPath::from_str(origin_derivation_path)
         .map_to_permanent_failure("Failed to build derivation path")?;
     let descriptor_derivation_path = DerivationPath::from_str(key_derivation_path)

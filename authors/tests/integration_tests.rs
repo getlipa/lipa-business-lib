@@ -12,9 +12,10 @@ fn test_basic_auth() {
         AuthLevel::Basic,
         wallet_keypair,
         auth_keypair,
-    );
+    )
+    .unwrap();
 
-    auth.query_token();
+    auth.query_token().unwrap();
 }
 
 #[test]
@@ -26,9 +27,10 @@ fn test_owner_auth() {
         AuthLevel::Owner,
         wallet_keypair,
         auth_keypair,
-    );
+    )
+    .unwrap();
 
-    auth.query_token();
+    auth.query_token().unwrap();
 }
 
 #[test]
@@ -41,9 +43,10 @@ fn test_employee_auth() {
         AuthLevel::Employee,
         wallet_keypair,
         auth_keypair,
-    );
+    )
+    .unwrap();
 
-    auth.query_token();
+    auth.query_token().unwrap();
 }
 
 fn generate_keys() -> (KeyPair, KeyPair) {
