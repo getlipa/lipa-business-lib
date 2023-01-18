@@ -1,17 +1,16 @@
+mod graphql;
 pub mod provider;
 pub mod secrets;
 mod signing;
 
+use crate::secrets::KeyPair;
 pub use provider::AuthLevel;
-
 use provider::AuthProvider;
 
-use std::sync::Mutex;
-use std::time::{Duration, SystemTime};
-
-use crate::secrets::KeyPair;
 use base64::{engine::general_purpose, Engine as _};
 use serde_json::Value;
+use std::sync::Mutex;
+use std::time::{Duration, SystemTime};
 
 const TOKEN_TO_BE_YET_VALID: Duration = Duration::from_secs(10);
 
@@ -27,8 +26,13 @@ pub struct Auth {
 }
 
 impl Auth {
-    pub fn new(auth_level: AuthLevel, wallet_keypair: KeyPair, auth_keypair: KeyPair) -> Self {
-        let mut provider = AuthProvider::new(auth_level, wallet_keypair, auth_keypair);
+    pub fn new(
+        backend_url: String,
+        auth_level: AuthLevel,
+        wallet_keypair: KeyPair,
+        auth_keypair: KeyPair,
+    ) -> Self {
+        let mut provider = AuthProvider::new(backend_url, auth_level, wallet_keypair, auth_keypair);
         let token = parse_token(provider.query_token());
         Auth {
             provider: Mutex::new(provider),

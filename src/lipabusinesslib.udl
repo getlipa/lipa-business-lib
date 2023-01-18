@@ -225,7 +225,7 @@ enum AuthLevel {
 };
 
 interface Auth {
-    constructor(AuthLevel auth_level, KeyPair wallet_keypair, KeyPair auth_keypair);
+    constructor(string backend_url, AuthLevel auth_level, KeyPair wallet_keypair, KeyPair auth_keypair);
 
     string query_token();
 };
