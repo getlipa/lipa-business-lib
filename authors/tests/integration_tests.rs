@@ -2,6 +2,8 @@ use authors::secrets::{derive_keys, generate_keypair, generate_mnemonic, KeyPair
 use authors::{Auth, AuthLevel};
 use bdk::bitcoin::Network;
 use std::env;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[test]
 fn test_basic_auth() {
@@ -15,7 +17,13 @@ fn test_basic_auth() {
     )
     .unwrap();
 
-    auth.query_token().unwrap();
+    let token = auth.query_token().unwrap();
+    let next_token = auth.query_token().unwrap();
+    assert_eq!(token, next_token);
+
+    sleep(Duration::from_secs(1));
+    let refreshed_token = auth.refresh_token().unwrap();
+    assert_ne!(token, refreshed_token);
 }
 
 #[test]
@@ -30,7 +38,13 @@ fn test_owner_auth() {
     )
     .unwrap();
 
-    auth.query_token().unwrap();
+    let token = auth.query_token().unwrap();
+    let next_token = auth.query_token().unwrap();
+    assert_eq!(token, next_token);
+
+    sleep(Duration::from_secs(1));
+    let refreshed_token = auth.refresh_token().unwrap();
+    assert_ne!(token, refreshed_token);
 }
 
 #[test]
@@ -46,7 +60,13 @@ fn test_employee_auth() {
     )
     .unwrap();
 
-    auth.query_token().unwrap();
+    let token = auth.query_token().unwrap();
+    let next_token = auth.query_token().unwrap();
+    assert_eq!(token, next_token);
+
+    sleep(Duration::from_secs(1));
+    let refreshed_token = auth.refresh_token().unwrap();
+    assert_ne!(token, refreshed_token);
 }
 
 fn generate_keys() -> (KeyPair, KeyPair) {

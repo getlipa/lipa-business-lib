@@ -9,7 +9,7 @@ pub use provider::AuthLevel;
 use crate::errors::{AuthResult, AuthRuntimeErrorCode};
 use crate::secrets::KeyPair;
 use base64::{engine::general_purpose, Engine as _};
-use lipa_errors::{permanent_failure, MapToLipaError, OptionToError};
+use lipa_errors::{MapToLipaError, OptionToError};
 use provider::AuthProvider;
 use serde_json::Value;
 use std::sync::Mutex;
@@ -57,12 +57,17 @@ impl Auth {
 
         let token = parse_token(provider.query_token()?)?;
         *self.token.lock().unwrap() = token;
-        if let Some(token) = self.get_token_if_valid()? {
-            return Ok(token);
-        }
-        Err(permanent_failure(
-            "Newly refreshed token is not valid long enough",
-        ))
+        self.get_token_if_valid()?
+            .ok_or_permanent_failure("Newly refreshed token is not valid long enough")
+    }
+
+    // Not exposed in UDL, used in tests.
+    pub fn refresh_token(&self) -> AuthResult<String> {
+        let mut provider = self.provider.lock().unwrap();
+        let token = parse_token(provider.query_token()?)?;
+        *self.token.lock().unwrap() = token;
+        self.get_token_if_valid()?
+            .ok_or_permanent_failure("Newly refreshed token is not valid long enough")
     }
 
     fn get_token_if_valid(&self) -> AuthResult<Option<String>> {
