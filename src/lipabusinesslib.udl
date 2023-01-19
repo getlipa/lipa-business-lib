@@ -45,6 +45,8 @@ interface LblError {
 };
 
 enum AuthRuntimeErrorCode {
+    "AuthServiceError",
+    "NetworkError",
     "GenericError", // A generic error for unexpected/unknown runtime errors
 };
 
