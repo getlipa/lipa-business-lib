@@ -116,24 +116,20 @@ impl AuthProvider {
                 )?;
         trace!("Response body: {:?}", response_body);
 
-        Self::handle_response_errors(&response_body)?;
+        let data = Self::get_response_data(&response_body)?;
 
-        let session_permit = response_body
-            .data
-            .ok_or_permanent_failure("Response has no data")?
-            .start_session_v2
-            .ok_or_permanent_failure(
-                "Response to start_session request doesn't have the expected structure",
-            )?;
-        let access_token = session_permit.access_token.ok_or_permanent_failure(
+        let session_permit = data.start_session_v2.as_ref().ok_or_permanent_failure(
+            "Response to start_session request doesn't have the expected structure",
+        )?;
+        let access_token = session_permit.access_token.as_ref().ok_or_permanent_failure(
             "Response to start_session request doesn't have the expected structure: missing access token",
-        )?;
-        let refresh_token = session_permit.refresh_token.ok_or_permanent_failure(
+        )?.clone();
+        let refresh_token = session_permit.refresh_token.as_ref().ok_or_permanent_failure(
             "Response to start_session request doesn't have the expected structure: missing refresh token",
-        )?;
-        let wallet_pub_key_id = session_permit.wallet_pub_key_id.ok_or_permanent_failure(
+        )?.clone();
+        let wallet_pub_key_id = session_permit.wallet_pub_key_id.as_ref().ok_or_permanent_failure(
             "Response to start_session request doesn't have the expected structure: missing wallet public key id",
-        )?;
+        )?.clone();
         info!("access_token: {}", access_token);
         info!("refresh_token: {}", refresh_token);
         info!("wallet_pub_key_id: {}", wallet_pub_key_id);
@@ -183,15 +179,15 @@ impl AuthProvider {
         )?;
         trace!("Response body: {:?}", response_body);
 
-        Self::handle_response_errors(&response_body)?;
+        let data = Self::get_response_data(&response_body)?;
 
-        let prepared_permission_token = response_body
-            .data
-            .ok_or_permanent_failure("Response has no data")?
+        let prepared_permission_token = data
             .prepare_wallet_session
+            .as_ref()
             .ok_or_permanent_failure(
                 "Response to prepare_wallet_session request doesn't have the expected structure",
-            )?;
+            )?
+            .clone();
 
         info!("Starting wallet session ...");
         let variables = unlock_wallet::Variables {
@@ -210,21 +206,20 @@ impl AuthProvider {
         )?;
         trace!("Response body: {:?}", response_body);
 
-        Self::handle_response_errors(&response_body)?;
+        let data = Self::get_response_data(&response_body)?;
 
-        let session_permit = response_body
-            .data
-            .ok_or_permanent_failure("Response has no data")?
+        let session_permit = data
             .start_prepared_session
+            .as_ref()
             .ok_or_permanent_failure(
                 "Response to unlock_wallet request doesn't have the expected structure",
             )?;
-        let access_token = session_permit.access_token.ok_or_permanent_failure(
+        let access_token = session_permit.access_token.as_ref().ok_or_permanent_failure(
             "Response to unlock_wallet request doesn't have the expected structure: missing access token",
-        )?;
-        let refresh_token = session_permit.refresh_token.ok_or_permanent_failure(
+        )?.clone();
+        let refresh_token = session_permit.refresh_token.as_ref().ok_or_permanent_failure(
             "Response to unlock_wallet request doesn't have the expected structure: missing refresh token",
-        )?;
+        )?.clone();
 
         info!("access_token: {}", access_token);
         info!("refresh_token: {}", refresh_token);
@@ -264,11 +259,9 @@ impl AuthProvider {
         )?;
         trace!("Response body: {:?}", response_body);
 
-        Self::handle_response_errors(&response_body)?;
+        let data = Self::get_response_data(&response_body)?;
 
-        let result = response_body
-            .data
-            .ok_or_permanent_failure("Response has no data")?
+        let result = data
             .wallet_acl
             .first()
             .map(|w| w.owner_wallet_pub_key_id.clone());
@@ -288,21 +281,17 @@ impl AuthProvider {
                 )?;
         trace!("Response body: {:?}", response_body);
 
-        Self::handle_response_errors(&response_body)?;
+        let data = Self::get_response_data(&response_body)?;
 
-        let session_permit = response_body
-            .data
-            .ok_or_permanent_failure("Response has no data")?
-            .refresh_session
-            .ok_or_permanent_failure(
-                "Response to refresh_session request doesn't have the expected structure",
-            )?;
-        let access_token = session_permit.access_token.ok_or_permanent_failure(
+        let session_permit = data.refresh_session.as_ref().ok_or_permanent_failure(
+            "Response to refresh_session request doesn't have the expected structure",
+        )?;
+        let access_token = session_permit.access_token.as_ref().ok_or_permanent_failure(
             "Response to unlock_wallet request doesn't have the expected structure: missing access token",
-        )?;
-        let refresh_token = session_permit.refresh_token.ok_or_permanent_failure(
+        )?.clone();
+        let refresh_token = session_permit.refresh_token.as_ref().ok_or_permanent_failure(
             "Response to unlock_wallet request doesn't have the expected structure: missing refresh token",
-        )?;
+        )?.clone();
 
         info!("access_token: {}", access_token);
         info!("refresh_token: {}", refresh_token);
@@ -324,20 +313,18 @@ impl AuthProvider {
         )?;
         trace!("Response body: {:?}", response_body);
 
-        Self::handle_response_errors(&response_body)?;
+        let data = Self::get_response_data(&response_body)?;
 
-        let challenge = response_body
-            .data
-            .ok_or_permanent_failure("Response has no data")?
-            .auth_challenge
+        let challenge = data
+            .auth_challenge.as_ref()
             .ok_or_permanent_failure(
                 "Response to request_challenge request doesn't have the expected structure: missing auth challenge",
-            )?;
+            )?.clone();
 
         Ok(challenge)
     }
 
-    fn handle_response_errors<D>(response: &Response<D>) -> AuthResult<()> {
+    fn get_response_data<Data>(response: &Response<Data>) -> AuthResult<&Data> {
         if let Some(errors) = response.errors.as_ref() {
             let error = errors
                 .get(0)
@@ -384,7 +371,11 @@ impl AuthProvider {
                 }
             }
         } else {
-            Ok(())
+            let data = response
+                .data
+                .as_ref()
+                .ok_or_permanent_failure("Response has no data")?;
+            Ok(data)
         }
     }
 }
