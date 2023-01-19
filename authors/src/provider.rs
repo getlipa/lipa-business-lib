@@ -1,4 +1,4 @@
-use crate::errors::AuthResult;
+use crate::errors::{AuthError, AuthResult, AuthRuntimeErrorCode};
 use crate::graphql::*;
 use crate::secrets::KeyPair;
 use crate::signing::sign;
@@ -44,14 +44,19 @@ impl AuthProvider {
     }
 
     pub fn query_token(&mut self) -> AuthResult<String> {
-        let (access_token, refresh_token) = match self.refresh_token.take() {
+        let (access_token, refresh_token) = match self.refresh_token.clone() {
             Some(refresh_token) => {
-                // TODO: Tolerate invalid refresh token error and fallback to
-                // run_aut_flow().
-                self.refresh_session(refresh_token)
+                match self.refresh_session(refresh_token) {
+                    // Tolerate authentication errors and retry auth flow.
+                    Err(AuthError::RuntimeError {
+                        code: AuthRuntimeErrorCode::AuthServiceError,
+                        ..
+                    }) => self.run_auth_flow(),
+                    result => result,
+                }
             }
-            None => self.run_auth_flow()?,
-        };
+            None => self.run_auth_flow(),
+        }?;
         self.refresh_token = Some(refresh_token);
         Ok(access_token)
     }
@@ -211,7 +216,7 @@ impl AuthProvider {
         result
     }
 
-    fn refresh_session(&self, refresh_token: String) -> (String, String) {
+    fn refresh_session(&self, refresh_token: String) -> AuthResult<(String, String)> {
         // Refresh session.
         println!("Refreshing session ...");
         let variables = refresh_session::Variables { refresh_token };
@@ -226,7 +231,7 @@ impl AuthProvider {
         println!("access_token: {}", access_token);
         println!("refresh_token: {}", refresh_token);
 
-        (access_token, refresh_token)
+        Ok((access_token, refresh_token))
     }
 
     fn request_challenge(&self) -> String {
