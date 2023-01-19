@@ -5,7 +5,6 @@ use lipa_errors::{MapToLipaError, OptionToError};
 use serde_json::Value;
 use std::time::{Duration, SystemTime};
 
-#[derive(Clone)]
 pub(crate) struct Token {
     pub raw: String,
     pub received_at: SystemTime,
