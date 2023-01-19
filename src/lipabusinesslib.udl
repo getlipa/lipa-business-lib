@@ -253,7 +253,7 @@ interface Auth {
     // Creates a new Auth instance.
     //
     // Parameters:
-    // * backend_url: The URL of the backend instance to authenticate with.
+    // * backend_url: The URL of the backend instance to authenticate on.
     // * auth_level: The authorization level to which authentication will be done.
     // * wallet_keypair: The local wallet keypair
     // * auth_keypair: A random keypair
