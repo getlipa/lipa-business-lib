@@ -9,6 +9,8 @@ use lipa_errors::{permanent_failure, runtime_error, MapToLipaError, OptionToErro
 use log::{info, trace};
 use reqwest::blocking::Client;
 
+const USER_AGENT: &str = "graphql-rust/0.12.0";
+
 const AUTH_EXCEPTION_CODE: &str = "authentication-exception";
 const INVALID_JWT_ERROR_CODE: &str = "invalid-jwt";
 const MISSING_HTTP_HEADER_EXCEPTION_CODE: &str = "http-header-missing-exception";
@@ -38,7 +40,7 @@ impl AuthProvider {
         auth_keypair: KeyPair,
     ) -> AuthResult<Self> {
         let client = Client::builder()
-            .user_agent("graphql-rust/0.11.0")
+            .user_agent(USER_AGENT)
             .build()
             .map_to_permanent_failure("Failed to build a reqwest client")?;
         Ok(AuthProvider {
@@ -157,7 +159,7 @@ impl AuthProvider {
         };
 
         let client_with_token = Client::builder()
-            .user_agent("graphql-rust/0.11.0")
+            .user_agent(USER_AGENT)
             .default_headers(
                 std::iter::once((
                     reqwest::header::AUTHORIZATION,
@@ -234,7 +236,7 @@ impl AuthProvider {
     ) -> AuthResult<Option<String>> {
         info!("Getting business owner ...");
         let client_with_token = Client::builder()
-            .user_agent("graphql-rust/0.11.0")
+            .user_agent(USER_AGENT)
             .default_headers(
                 std::iter::once((
                     reqwest::header::AUTHORIZATION,
