@@ -1,5 +1,6 @@
 pub mod errors;
 mod graphql;
+mod jwt;
 pub mod provider;
 pub mod secrets;
 mod signing;
@@ -7,21 +8,15 @@ mod signing;
 pub use provider::AuthLevel;
 
 use crate::errors::{AuthResult, AuthRuntimeErrorCode};
+use crate::jwt::{parse_token, Token};
+use crate::provider::AuthProvider;
 use crate::secrets::KeyPair;
-use base64::{engine::general_purpose, Engine as _};
+
 use lipa_errors::{MapToLipaError, OptionToError};
-use provider::AuthProvider;
-use serde_json::Value;
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
-const TOKEN_TO_BE_YET_VALID: Duration = Duration::from_secs(10);
-
-#[derive(Clone)]
-struct Token {
-    raw: String,
-    expires_at: SystemTime,
-}
+const TOKEN_VALIDITY_LEEWAY_PERCENTS: u32 = 10;
 
 pub struct Auth {
     provider: Mutex<AuthProvider>,
@@ -37,7 +32,7 @@ impl Auth {
     ) -> AuthResult<Self> {
         let mut provider =
             AuthProvider::new(backend_url, auth_level, wallet_keypair, auth_keypair)?;
-        let token = parse_token(provider.query_token()?)?;
+        let token = Self::parse_token(provider.query_token()?)?;
         Ok(Auth {
             provider: Mutex::new(provider),
             token: Mutex::new(token),
@@ -55,7 +50,7 @@ impl Auth {
             return Ok(token);
         }
 
-        let token = parse_token(provider.query_token()?)?;
+        let token = Self::parse_token(provider.query_token()?)?;
         *self.token.lock().unwrap() = token;
         self.get_token_if_valid()?
             .ok_or_permanent_failure("Newly refreshed token is not valid long enough")
@@ -64,7 +59,7 @@ impl Auth {
     // Not exposed in UDL, used in tests.
     pub fn refresh_token(&self) -> AuthResult<String> {
         let mut provider = self.provider.lock().unwrap();
-        let token = parse_token(provider.query_token()?)?;
+        let token = Self::parse_token(provider.query_token()?)?;
         *self.token.lock().unwrap() = token;
         self.get_token_if_valid()?
             .ok_or_permanent_failure("Newly refreshed token is not valid long enough")
@@ -73,68 +68,31 @@ impl Auth {
     fn get_token_if_valid(&self) -> AuthResult<Option<String>> {
         let now = SystemTime::now();
         let token = self.token.lock().unwrap();
-        // TODO: Substruct 10% of token validity.
-        if token.expires_at > now + TOKEN_TO_BE_YET_VALID {
+        if now < token.expires_at {
             Ok(Some(token.raw.clone()))
         } else {
             Ok(None)
         }
     }
-}
 
-fn parse_token(raw_token: String) -> AuthResult<Token> {
-    let splitted_jwt_strings: Vec<_> = raw_token.split('.').collect();
-
-    let jwt_body = splitted_jwt_strings.get(1).ok_or_runtime_error(
-        AuthRuntimeErrorCode::GenericError,
-        "Failed to get JWT body: JWT String isn't split with '.' characters",
-    )?;
-
-    let decoded_jwt_body = general_purpose::STANDARD_NO_PAD
-        .decode(jwt_body)
-        .map_to_runtime_error(AuthRuntimeErrorCode::GenericError, "Failed to decode JWT")?;
-    let converted_jwt_body = String::from_utf8(decoded_jwt_body).map_to_runtime_error(
-        AuthRuntimeErrorCode::GenericError,
-        "Failed to decode serialized JWT into json",
-    )?;
-
-    let parsed_jwt_body = serde_json::from_str::<Value>(&converted_jwt_body).map_to_runtime_error(
-        AuthRuntimeErrorCode::GenericError,
-        "Failed to get parse JWT json",
-    )?;
-
-    let expires_at = get_expiry(&parsed_jwt_body)?;
-
-    /*println!(
-        "The parsed token will expiry in {} secs",
-        expires_at
-            .duration_since(SystemTime::now())
-            .unwrap()
-            .as_secs()
-    );*/
-    Ok(Token {
-        raw: raw_token,
-        expires_at,
-    })
-}
-
-fn get_expiry(jwt_body: &Value) -> AuthResult<SystemTime> {
-    let expiry = jwt_body
-        .as_object()
-        .ok_or_runtime_error(
-            AuthRuntimeErrorCode::GenericError,
-            "Failed to get JWT body json object",
-        )?
-        .get("exp")
-        .ok_or_runtime_error(
-            AuthRuntimeErrorCode::GenericError,
-            "JWT doesn't have an expiry field",
-        )?
-        .as_u64()
-        .ok_or_runtime_error(
-            AuthRuntimeErrorCode::GenericError,
-            "Failed to parse JWT expiry into unsigned integer",
+    fn parse_token(raw_token: String) -> AuthResult<Token> {
+        let mut token = parse_token(raw_token).map_to_runtime_error(
+            AuthRuntimeErrorCode::AuthServiceError,
+            "Auth service returned invalid JWT",
         )?;
+        let token_validity_period = token
+            .expires_at
+            .duration_since(token.received_at)
+            .map_to_runtime_error(
+                AuthRuntimeErrorCode::AuthServiceError,
+                "expiration date of JWT is in the past",
+            )?;
+        let leeway = token_validity_period
+            .checked_div(100 / TOKEN_VALIDITY_LEEWAY_PERCENTS)
+            .ok_or_permanent_failure("Failed to divide duration")?;
+        token.expires_at -= leeway;
+        debug_assert!(token.received_at < token.expires_at);
 
-    Ok(SystemTime::UNIX_EPOCH + Duration::from_secs(expiry))
+        Ok(token)
+    }
 }
