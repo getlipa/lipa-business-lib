@@ -20,7 +20,7 @@ enum LogLevel {
     "Trace",
 };
 
-// A code that specifies the RuntimError that ocurred
+// A code that specifies an LBL RuntimeError that ocurred
 enum LblRuntimeErrorCode {
     "ElectrumServiceUnavailable", // The electrum service is unavailable. Could there be a loss of internet connection?
     "NotEnoughFunds", // There are not enough funds to create the tx that was requested
@@ -44,9 +44,10 @@ interface LblError {
     PermanentFailure(string msg);
 };
 
+// A code that specifies an Auth RuntimeError that ocurred
 enum AuthRuntimeErrorCode {
-    "AuthServiceError",
-    "NetworkError",
+    "AuthServiceError", // An error occurred with the authentication process. Please try again.
+    "NetworkError", // Failed to get a response from a remote service. Could there be a loss of internet connection?
     "GenericError", // A generic error for unexpected/unknown runtime errors
 };
 
@@ -239,6 +240,9 @@ dictionary TxDetails {
     TxStatus status;
 };
 
+// An authorization level
+//
+// Owner and Employee levels include the basic level privileges
 enum AuthLevel {
     "Basic",
     "Owner",
@@ -246,9 +250,23 @@ enum AuthLevel {
 };
 
 interface Auth {
+    // Creates a new Auth instance.
+    //
+    // Parameters:
+    // * backend_url: The URL of the backend instance to authenticate on.
+    // * auth_level: The authorization level to which authentication will be done.
+    // * wallet_keypair: The local wallet keypair
+    // * auth_keypair: A random keypair
     [Throws=AuthError]
     constructor(string backend_url, AuthLevel auth_level, KeyPair wallet_keypair, KeyPair auth_keypair);
 
+    // Get a hot access token
+    //
+    // Internally, this handles getting a valid access token by one of the following ways:
+    // * Returning a cached token if it hasn't expired
+    // * Refreshing the access token using a refresh token if it hasn't expired
+    // * Restarting the auth process
+    // As such, the execution time of this method can vary.
     [Throws=AuthError]
     string query_token();
 };
