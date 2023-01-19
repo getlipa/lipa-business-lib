@@ -4,8 +4,16 @@ use crate::secrets::KeyPair;
 use crate::signing::sign;
 
 use graphql_client::reqwest::post_graphql_blocking;
-use lipa_errors::MapToLipaError;
+use graphql_client::Response;
+use lipa_errors::{permanent_failure, runtime_error, MapToLipaError, OptionToError};
+use log::{info, trace};
 use reqwest::blocking::Client;
+
+const AUTH_EXCEPTION_CODE: &str = "authentication-exception";
+const INVALID_JWT_ERROR_CODE: &str = "invalid-jwt";
+const MISSING_HTTP_HEADER_EXCEPTION_CODE: &str = "http-header-missing-exception";
+const INVALID_INVITATION_EXCEPTION_CODE: &str = "invalid-invitation-exception";
+const REMOTE_SCHEMA_ERROR_CODE: &str = "remote-schema-error";
 
 pub enum AuthLevel {
     Basic,
@@ -64,23 +72,23 @@ impl AuthProvider {
     fn run_auth_flow(&self) -> AuthResult<(String, String)> {
         let (access_token, refresh_token, wallet_pub_key_id) = self.start_basic_session()?;
 
-        Ok(match self.auth_level {
-            AuthLevel::Basic => (access_token, refresh_token),
+        match self.auth_level {
+            AuthLevel::Basic => Ok((access_token, refresh_token)),
             AuthLevel::Owner => self.start_priviledged_session(access_token, wallet_pub_key_id),
             AuthLevel::Employee => {
                 let owner_pub_key_id =
-                    self.get_business_owner(access_token.clone(), wallet_pub_key_id);
+                    self.get_business_owner(access_token.clone(), wallet_pub_key_id)?;
                 if let Some(owner_pub_key_id) = owner_pub_key_id {
                     self.start_priviledged_session(access_token, owner_pub_key_id)
                 } else {
                     panic!("Employee does not belong to any owner");
                 }
             }
-        })
+        }
     }
 
     fn start_basic_session(&self) -> AuthResult<(String, String, String)> {
-        let challenge = self.request_challenge();
+        let challenge = self.request_challenge()?;
 
         let challenge_with_prefix = add_bitcoin_message_prefix(&challenge);
         let challenge_signature = sign(challenge_with_prefix, self.auth_keypair.secret_key.clone());
@@ -91,7 +99,7 @@ impl AuthProvider {
             self.wallet_keypair.secret_key.clone(),
         );
 
-        println!("Starting session ...");
+        info!("Starting session ...");
         let variables = start_session::Variables {
             auth_pub_key: add_hex_prefix(&self.auth_keypair.public_key),
             challenge,
@@ -102,15 +110,29 @@ impl AuthProvider {
 
         let response_body =
             post_graphql_blocking::<StartSession, _>(&self.client, &self.backend_url, variables)
-                .unwrap();
-        // println!("Response body: {:?}", response_body);
-        let session_permit = response_body.data.unwrap().start_session_v2.unwrap();
-        let access_token = session_permit.access_token.unwrap();
-        let refresh_token = session_permit.refresh_token.unwrap();
-        let wallet_pub_key_id = session_permit.wallet_pub_key_id.unwrap();
-        println!("access_token: {}", access_token);
-        println!("refresh_token: {}", refresh_token);
-        println!("wallet_pub_key_id: {}", wallet_pub_key_id);
+                .map_to_runtime_error(
+                    AuthRuntimeErrorCode::NetworkError,
+                    "Failed to get a response to a start_session request",
+                )?;
+        trace!("Response body: {:?}", response_body);
+
+        let data = get_response_data(&response_body)?;
+
+        let session_permit = data.start_session_v2.as_ref().ok_or_permanent_failure(
+            "Response to start_session request doesn't have the expected structure",
+        )?;
+        let access_token = session_permit.access_token.as_ref().ok_or_permanent_failure(
+            "Response to start_session request doesn't have the expected structure: missing access token",
+        )?.clone();
+        let refresh_token = session_permit.refresh_token.as_ref().ok_or_permanent_failure(
+            "Response to start_session request doesn't have the expected structure: missing refresh token",
+        )?.clone();
+        let wallet_pub_key_id = session_permit.wallet_pub_key_id.as_ref().ok_or_permanent_failure(
+            "Response to start_session request doesn't have the expected structure: missing wallet public key id",
+        )?.clone();
+        info!("access_token: {}", access_token);
+        info!("refresh_token: {}", refresh_token);
+        info!("wallet_pub_key_id: {}", wallet_pub_key_id);
         Ok((access_token, refresh_token, wallet_pub_key_id))
     }
 
@@ -118,8 +140,8 @@ impl AuthProvider {
         &self,
         access_token: String,
         owner_pub_key_id: String,
-    ) -> (String, String) {
-        let challenge = self.request_challenge();
+    ) -> AuthResult<(String, String)> {
+        let challenge = self.request_challenge()?;
 
         let challenge_with_prefix = add_bitcoin_message_prefix(&challenge);
         let challenge_signature = sign(
@@ -127,7 +149,7 @@ impl AuthProvider {
             self.wallet_keypair.secret_key.clone(),
         );
 
-        println!("Preparing wallet session ...");
+        info!("Preparing wallet session ...");
         let variables = prepare_wallet_session::Variables {
             wallet_pub_key_id: owner_pub_key_id,
             challenge: challenge.clone(),
@@ -140,22 +162,34 @@ impl AuthProvider {
                 std::iter::once((
                     reqwest::header::AUTHORIZATION,
                     reqwest::header::HeaderValue::from_str(&format!("Bearer {}", access_token))
-                        .unwrap(),
+                        .map_to_permanent_failure("Failed to build header value from str")?,
                 ))
                 .collect(),
             )
             .build()
-            .unwrap();
+            .map_to_permanent_failure("Failed to build a reqwest client")?;
         let response_body = post_graphql_blocking::<PrepareWalletSession, _>(
             &client_with_token,
             &self.backend_url,
             variables,
         )
-        .unwrap();
-        // println!("Response body: {:?}", response_body);
-        let prepared_permission_token = response_body.data.unwrap().prepare_wallet_session.unwrap();
+        .map_to_runtime_error(
+            AuthRuntimeErrorCode::NetworkError,
+            "Failed to get a response to a prepare_wallet_session request",
+        )?;
+        trace!("Response body: {:?}", response_body);
 
-        println!("Starting wallet session ...");
+        let data = get_response_data(&response_body)?;
+
+        let prepared_permission_token = data
+            .prepare_wallet_session
+            .as_ref()
+            .ok_or_permanent_failure(
+                "Response to prepare_wallet_session request doesn't have the expected structure",
+            )?
+            .clone();
+
+        info!("Starting wallet session ...");
         let variables = unlock_wallet::Variables {
             challenge,
             challenge_signature: add_hex_prefix(&challenge_signature),
@@ -166,36 +200,51 @@ impl AuthProvider {
             &self.backend_url,
             variables,
         )
-        .unwrap();
-        // println!("Response body: {:?}", response_body);
-        let session_permit = response_body.data.unwrap().start_prepared_session.unwrap();
-        let access_token = session_permit.access_token.unwrap();
-        let refresh_token = session_permit.refresh_token.unwrap();
+        .map_to_runtime_error(
+            AuthRuntimeErrorCode::NetworkError,
+            "Failed to get a response to a unlock_wallet request",
+        )?;
+        trace!("Response body: {:?}", response_body);
 
-        println!("access_token: {}", access_token);
-        println!("refresh_token: {}", refresh_token);
+        let data = get_response_data(&response_body)?;
 
-        (access_token, refresh_token)
+        let session_permit = data
+            .start_prepared_session
+            .as_ref()
+            .ok_or_permanent_failure(
+                "Response to unlock_wallet request doesn't have the expected structure",
+            )?;
+        let access_token = session_permit.access_token.as_ref().ok_or_permanent_failure(
+            "Response to unlock_wallet request doesn't have the expected structure: missing access token",
+        )?.clone();
+        let refresh_token = session_permit.refresh_token.as_ref().ok_or_permanent_failure(
+            "Response to unlock_wallet request doesn't have the expected structure: missing refresh token",
+        )?.clone();
+
+        info!("access_token: {}", access_token);
+        info!("refresh_token: {}", refresh_token);
+
+        Ok((access_token, refresh_token))
     }
 
     fn get_business_owner(
         &self,
         access_token: String,
         wallet_pub_key_id: String,
-    ) -> Option<String> {
-        println!("Getting business owner ...");
+    ) -> AuthResult<Option<String>> {
+        info!("Getting business owner ...");
         let client_with_token = Client::builder()
             .user_agent("graphql-rust/0.11.0")
             .default_headers(
                 std::iter::once((
                     reqwest::header::AUTHORIZATION,
                     reqwest::header::HeaderValue::from_str(&format!("Bearer {}", access_token))
-                        .unwrap(),
+                        .map_to_permanent_failure("Failed to build header value from str")?,
                 ))
                 .collect(),
             )
             .build()
-            .unwrap();
+            .map_to_permanent_failure("Failed to build a reqwest client")?;
         let variables = get_business_owner::Variables {
             owner_wallet_pub_key_id: wallet_pub_key_id,
         };
@@ -204,47 +253,125 @@ impl AuthProvider {
             &self.backend_url,
             variables,
         )
-        .unwrap();
-        // println!("Response body: {:?}", response_body);
-        let result = response_body
-            .data
-            .unwrap()
+        .map_to_runtime_error(
+            AuthRuntimeErrorCode::NetworkError,
+            "Failed to get a response to a get_business_owner request",
+        )?;
+        trace!("Response body: {:?}", response_body);
+
+        let data = get_response_data(&response_body)?;
+
+        let result = data
             .wallet_acl
             .first()
             .map(|w| w.owner_wallet_pub_key_id.clone());
-        println!("Owner: {:?}", result);
-        result
+        info!("Owner: {:?}", result);
+        Ok(result)
     }
 
     fn refresh_session(&self, refresh_token: String) -> AuthResult<(String, String)> {
         // Refresh session.
-        println!("Refreshing session ...");
+        info!("Refreshing session ...");
         let variables = refresh_session::Variables { refresh_token };
         let response_body =
             post_graphql_blocking::<RefreshSession, _>(&self.client, &self.backend_url, variables)
-                .unwrap();
-        // println!("Response body: {:?}", response_body);
-        let session_permit = response_body.data.unwrap().refresh_session.unwrap();
-        let access_token = session_permit.access_token.unwrap();
-        let refresh_token = session_permit.refresh_token.unwrap();
+                .map_to_runtime_error(
+                    AuthRuntimeErrorCode::NetworkError,
+                    "Failed to get a response to a refresh_session request",
+                )?;
+        trace!("Response body: {:?}", response_body);
 
-        println!("access_token: {}", access_token);
-        println!("refresh_token: {}", refresh_token);
+        let data = get_response_data(&response_body)?;
+
+        let session_permit = data.refresh_session.as_ref().ok_or_permanent_failure(
+            "Response to refresh_session request doesn't have the expected structure",
+        )?;
+        let access_token = session_permit.access_token.as_ref().ok_or_permanent_failure(
+            "Response to unlock_wallet request doesn't have the expected structure: missing access token",
+        )?.clone();
+        let refresh_token = session_permit.refresh_token.as_ref().ok_or_permanent_failure(
+            "Response to unlock_wallet request doesn't have the expected structure: missing refresh token",
+        )?.clone();
+
+        info!("access_token: {}", access_token);
+        info!("refresh_token: {}", refresh_token);
 
         Ok((access_token, refresh_token))
     }
 
-    fn request_challenge(&self) -> String {
-        println!("Requesting challenge ...");
+    fn request_challenge(&self) -> AuthResult<String> {
+        info!("Requesting challenge ...");
         let variables = request_challenge::Variables {};
         let response_body = post_graphql_blocking::<RequestChallenge, _>(
             &self.client,
             &self.backend_url,
             variables,
         )
-        .unwrap();
-        let response_data: request_challenge::ResponseData = response_body.data.unwrap();
-        response_data.auth_challenge.unwrap()
+        .map_to_runtime_error(
+            AuthRuntimeErrorCode::NetworkError,
+            "Failed to get a response to a request_challenge request",
+        )?;
+        trace!("Response body: {:?}", response_body);
+
+        let data = get_response_data(&response_body)?;
+
+        let challenge = data
+            .auth_challenge.as_ref()
+            .ok_or_permanent_failure(
+                "Response to request_challenge request doesn't have the expected structure: missing auth challenge",
+            )?.clone();
+
+        Ok(challenge)
+    }
+}
+
+fn get_response_data<Data>(response: &Response<Data>) -> AuthResult<&Data> {
+    if let Some(errors) = response.errors.as_ref() {
+        let error = errors
+            .get(0)
+            .ok_or_permanent_failure("Unexpected backend response: errors empty")?;
+        let code = error
+            .extensions
+            .as_ref()
+            .ok_or_permanent_failure("Unexpected backend response: error without extensions")?
+            .get("code")
+            .ok_or_permanent_failure("Unexpected backend response: error without code")?
+            .as_str()
+            .ok_or_permanent_failure("Unexpected backend response: error code isn't string")?;
+
+        Err(map_error_code(code))
+    } else {
+        let data = response
+            .data
+            .as_ref()
+            .ok_or_permanent_failure("Response has no data")?;
+        Ok(data)
+    }
+}
+
+fn map_error_code(code: &str) -> AuthError {
+    match code {
+        AUTH_EXCEPTION_CODE => runtime_error(
+            AuthRuntimeErrorCode::AuthServiceError,
+            "The backend threw an Authentication Exception",
+        ),
+        INVALID_JWT_ERROR_CODE => runtime_error(
+            AuthRuntimeErrorCode::AuthServiceError,
+            "A request we made included an invalid JWT",
+        ),
+        MISSING_HTTP_HEADER_EXCEPTION_CODE => {
+            permanent_failure("A request we made didn't include the necessary HTTP header")
+        }
+        INVALID_INVITATION_EXCEPTION_CODE => permanent_failure(
+            "Unexpected backend response: invalid invitation when no invitations have been made",
+        ),
+        REMOTE_SCHEMA_ERROR_CODE => {
+            permanent_failure("A remote schema call has failed on the backend")
+        }
+        _ => permanent_failure(format!(
+            "Unexpected backend response: unknown error code {}",
+            code
+        )),
     }
 }
 

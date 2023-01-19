@@ -1,9 +1,21 @@
 use authors::secrets::{derive_keys, generate_keypair, generate_mnemonic, KeyPair};
 use authors::{Auth, AuthLevel};
 use bdk::bitcoin::Network;
+use simplelog::TestLogger;
 use std::env;
+use std::sync::Once;
 use std::thread::sleep;
 use std::time::Duration;
+
+static INIT_LOGGER_ONCE: Once = Once::new();
+
+#[cfg(test)]
+#[ctor::ctor]
+fn init() {
+    INIT_LOGGER_ONCE.call_once(|| {
+        TestLogger::init(simplelog::LevelFilter::Info, simplelog::Config::default()).unwrap();
+    });
+}
 
 #[test]
 fn test_basic_auth() {
