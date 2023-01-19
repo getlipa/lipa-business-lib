@@ -116,7 +116,7 @@ impl AuthProvider {
                 )?;
         trace!("Response body: {:?}", response_body);
 
-        let data = Self::get_response_data(&response_body)?;
+        let data = get_response_data(&response_body)?;
 
         let session_permit = data.start_session_v2.as_ref().ok_or_permanent_failure(
             "Response to start_session request doesn't have the expected structure",
@@ -179,7 +179,7 @@ impl AuthProvider {
         )?;
         trace!("Response body: {:?}", response_body);
 
-        let data = Self::get_response_data(&response_body)?;
+        let data = get_response_data(&response_body)?;
 
         let prepared_permission_token = data
             .prepare_wallet_session
@@ -206,7 +206,7 @@ impl AuthProvider {
         )?;
         trace!("Response body: {:?}", response_body);
 
-        let data = Self::get_response_data(&response_body)?;
+        let data = get_response_data(&response_body)?;
 
         let session_permit = data
             .start_prepared_session
@@ -259,7 +259,7 @@ impl AuthProvider {
         )?;
         trace!("Response body: {:?}", response_body);
 
-        let data = Self::get_response_data(&response_body)?;
+        let data = get_response_data(&response_body)?;
 
         let result = data
             .wallet_acl
@@ -281,7 +281,7 @@ impl AuthProvider {
                 )?;
         trace!("Response body: {:?}", response_body);
 
-        let data = Self::get_response_data(&response_body)?;
+        let data = get_response_data(&response_body)?;
 
         let session_permit = data.refresh_session.as_ref().ok_or_permanent_failure(
             "Response to refresh_session request doesn't have the expected structure",
@@ -313,7 +313,7 @@ impl AuthProvider {
         )?;
         trace!("Response body: {:?}", response_body);
 
-        let data = Self::get_response_data(&response_body)?;
+        let data = get_response_data(&response_body)?;
 
         let challenge = data
             .auth_challenge.as_ref()
@@ -323,60 +323,55 @@ impl AuthProvider {
 
         Ok(challenge)
     }
+}
 
-    fn get_response_data<Data>(response: &Response<Data>) -> AuthResult<&Data> {
-        if let Some(errors) = response.errors.as_ref() {
-            let error = errors
-                .get(0)
-                .ok_or_permanent_failure("Unexpected backend response: errors empty")?;
-            let code = error
-                .extensions
-                .as_ref()
-                .ok_or_permanent_failure("Unexpected backend response: error without extensions")?
-                .get("code")
-                .ok_or_permanent_failure("Unexpected backend response: error without code")?
-                .as_str()
-                .ok_or_permanent_failure("Unexpected backend response: error code isn't string")?;
+fn get_response_data<Data>(response: &Response<Data>) -> AuthResult<&Data> {
+    if let Some(errors) = response.errors.as_ref() {
+        let error = errors
+            .get(0)
+            .ok_or_permanent_failure("Unexpected backend response: errors empty")?;
+        let code = error
+            .extensions
+            .as_ref()
+            .ok_or_permanent_failure("Unexpected backend response: error without extensions")?
+            .get("code")
+            .ok_or_permanent_failure("Unexpected backend response: error without code")?
+            .as_str()
+            .ok_or_permanent_failure("Unexpected backend response: error code isn't string")?;
 
-            match code {
-                AUTH_EXCEPTION_CODE => {
-                    Err(runtime_error(
-                        AuthRuntimeErrorCode::AuthServiceError,
-                        "The backend threw an Authentication Exception",
-                    ))
-                }
-                INVALID_JWT_ERROR_CODE => {
-                    Err(runtime_error(
-                        AuthRuntimeErrorCode::AuthServiceError,
-                        "A request we made included an invalid JWT"
-                    ))
-                }
-                MISSING_HTTP_HEADER_EXCEPTION_CODE => {
-                    Err(permanent_failure(
-                        "A request we made didn't include the necessary HTTP header",
-                    ))
-                }
-                INVALID_INVITATION_EXCEPTION_CODE => {
-                    Err(permanent_failure(
-                        "Unexpected backend response: invalid invitation when no invitations have been made"
-                    ))
-                },
-                REMOTE_SCHEMA_ERROR_CODE => {
-                    Err(permanent_failure("A remote schema call has failed on the backend"))
-                }
-                _ => {
-                    Err(permanent_failure(
-                        format!("Unexpected backend response: unknown error code {}", code),
-                    ))
-                }
-            }
-        } else {
-            let data = response
-                .data
-                .as_ref()
-                .ok_or_permanent_failure("Response has no data")?;
-            Ok(data)
+        Err(map_error_code(code))
+    } else {
+        let data = response
+            .data
+            .as_ref()
+            .ok_or_permanent_failure("Response has no data")?;
+        Ok(data)
+    }
+}
+
+fn map_error_code(code: &str) -> AuthError {
+    match code {
+        AUTH_EXCEPTION_CODE => runtime_error(
+            AuthRuntimeErrorCode::AuthServiceError,
+            "The backend threw an Authentication Exception",
+        ),
+        INVALID_JWT_ERROR_CODE => runtime_error(
+            AuthRuntimeErrorCode::AuthServiceError,
+            "A request we made included an invalid JWT",
+        ),
+        MISSING_HTTP_HEADER_EXCEPTION_CODE => {
+            permanent_failure("A request we made didn't include the necessary HTTP header")
         }
+        INVALID_INVITATION_EXCEPTION_CODE => permanent_failure(
+            "Unexpected backend response: invalid invitation when no invitations have been made",
+        ),
+        REMOTE_SCHEMA_ERROR_CODE => {
+            permanent_failure("A remote schema call has failed on the backend")
+        }
+        _ => permanent_failure(format!(
+            "Unexpected backend response: unknown error code {}",
+            code
+        )),
     }
 }
 
