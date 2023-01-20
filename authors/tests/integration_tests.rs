@@ -1,3 +1,4 @@
+use authors::errors::{AuthError, AuthRuntimeErrorCode};
 use authors::secrets::{derive_keys, generate_keypair, generate_mnemonic, KeyPair};
 use authors::{Auth, AuthLevel};
 use bdk::bitcoin::Network;
@@ -15,6 +16,28 @@ fn init() {
     INIT_LOGGER_ONCE.call_once(|| {
         TestLogger::init(simplelog::LevelFilter::Info, simplelog::Config::default()).unwrap();
     });
+}
+
+#[test]
+fn test_invalid_url() {
+    let (wallet_keypair, auth_keypair) = generate_keys();
+
+    let auth = Auth::new(
+        "localhost:9".to_string(),
+        AuthLevel::Basic,
+        wallet_keypair,
+        auth_keypair,
+    )
+    .unwrap();
+
+    let result = auth.query_token();
+    assert!(matches!(
+        result,
+        Err(AuthError::RuntimeError {
+            code: AuthRuntimeErrorCode::NetworkError,
+            ..
+        })
+    ));
 }
 
 #[test]

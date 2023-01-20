@@ -257,6 +257,8 @@ interface Auth {
     // * auth_level: The authorization level to which authentication will be done.
     // * wallet_keypair: The local wallet keypair
     // * auth_keypair: A random keypair
+    //
+    // The method does not access Internet
     [Throws=AuthError]
     constructor(string backend_url, AuthLevel auth_level, KeyPair wallet_keypair, KeyPair auth_keypair);
 

@@ -35,12 +35,14 @@ impl Auth {
         wallet_keypair: KeyPair,
         auth_keypair: KeyPair,
     ) -> AuthResult<Self> {
-        let mut provider =
-            AuthProvider::new(backend_url, auth_level, wallet_keypair, auth_keypair)?;
-        let token = adjust_token(provider.query_token()?)?;
+        let provider = AuthProvider::new(backend_url, auth_level, wallet_keypair, auth_keypair)?;
+        let expired_token = AdjustedToken {
+            raw: String::new(),
+            expires_at: SystemTime::UNIX_EPOCH,
+        };
         Ok(Auth {
             provider: Mutex::new(provider),
-            token: Mutex::new(token),
+            token: Mutex::new(expired_token),
         })
     }
 
