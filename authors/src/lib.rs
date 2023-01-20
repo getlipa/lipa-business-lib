@@ -1,5 +1,6 @@
 pub mod errors;
 mod graphql;
+mod jwt;
 pub mod provider;
 pub mod secrets;
 mod signing;
@@ -7,25 +8,24 @@ mod signing;
 pub use provider::AuthLevel;
 
 use crate::errors::{AuthResult, AuthRuntimeErrorCode};
+use crate::jwt::parse_token;
+use crate::provider::AuthProvider;
 use crate::secrets::KeyPair;
-use base64::{engine::general_purpose, Engine as _};
+
 use lipa_errors::{MapToLipaError, OptionToError};
-use provider::AuthProvider;
-use serde_json::Value;
+use std::cmp::{max, min};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
-const TOKEN_TO_BE_YET_VALID: Duration = Duration::from_secs(10);
-
 #[derive(Clone)]
-struct Token {
+struct AdjustedToken {
     raw: String,
     expires_at: SystemTime,
 }
 
 pub struct Auth {
     provider: Mutex<AuthProvider>,
-    token: Mutex<Token>,
+    token: Mutex<AdjustedToken>,
 }
 
 impl Auth {
@@ -37,7 +37,7 @@ impl Auth {
     ) -> AuthResult<Self> {
         let mut provider =
             AuthProvider::new(backend_url, auth_level, wallet_keypair, auth_keypair)?;
-        let token = parse_token(provider.query_token()?)?;
+        let token = adjust_token(provider.query_token()?)?;
         Ok(Auth {
             provider: Mutex::new(provider),
             token: Mutex::new(token),
@@ -55,7 +55,7 @@ impl Auth {
             return Ok(token);
         }
 
-        let token = parse_token(provider.query_token()?)?;
+        let token = adjust_token(provider.query_token()?)?;
         *self.token.lock().unwrap() = token;
         self.get_token_if_valid()?
             .ok_or_permanent_failure("Newly refreshed token is not valid long enough")
@@ -64,7 +64,7 @@ impl Auth {
     // Not exposed in UDL, used in tests.
     pub fn refresh_token(&self) -> AuthResult<String> {
         let mut provider = self.provider.lock().unwrap();
-        let token = parse_token(provider.query_token()?)?;
+        let token = adjust_token(provider.query_token()?)?;
         *self.token.lock().unwrap() = token;
         self.get_token_if_valid()?
             .ok_or_permanent_failure("Newly refreshed token is not valid long enough")
@@ -73,8 +73,7 @@ impl Auth {
     fn get_token_if_valid(&self) -> AuthResult<Option<String>> {
         let now = SystemTime::now();
         let token = self.token.lock().unwrap();
-        // TODO: Substruct 10% of token validity.
-        if token.expires_at > now + TOKEN_TO_BE_YET_VALID {
+        if now < token.expires_at {
             Ok(Some(token.raw.clone()))
         } else {
             Ok(None)
@@ -82,59 +81,69 @@ impl Auth {
     }
 }
 
-fn parse_token(raw_token: String) -> AuthResult<Token> {
-    let splitted_jwt_strings: Vec<_> = raw_token.split('.').collect();
-
-    let jwt_body = splitted_jwt_strings.get(1).ok_or_runtime_error(
-        AuthRuntimeErrorCode::GenericError,
-        "Failed to get JWT body: JWT String isn't split with '.' characters",
+fn adjust_token(raw_token: String) -> AuthResult<AdjustedToken> {
+    let token = parse_token(raw_token).map_to_runtime_error(
+        AuthRuntimeErrorCode::AuthServiceError,
+        "Auth service returned invalid JWT",
     )?;
 
-    let decoded_jwt_body = general_purpose::STANDARD_NO_PAD
-        .decode(jwt_body)
-        .map_to_runtime_error(AuthRuntimeErrorCode::GenericError, "Failed to decode JWT")?;
-    let converted_jwt_body = String::from_utf8(decoded_jwt_body).map_to_runtime_error(
-        AuthRuntimeErrorCode::GenericError,
-        "Failed to decode serialized JWT into json",
-    )?;
+    let token_validity_period = token
+        .expires_at
+        .duration_since(token.received_at)
+        .map_to_runtime_error(
+            AuthRuntimeErrorCode::AuthServiceError,
+            "Expiration date of JWT is in the past",
+        )?;
 
-    let parsed_jwt_body = serde_json::from_str::<Value>(&converted_jwt_body).map_to_runtime_error(
-        AuthRuntimeErrorCode::GenericError,
-        "Failed to get parse JWT json",
-    )?;
+    let leeway = compute_leeway(token_validity_period)?;
+    let expires_at = token.expires_at - leeway;
+    debug_assert!(token.received_at < expires_at);
 
-    let expires_at = get_expiry(&parsed_jwt_body)?;
-
-    /*println!(
-        "The parsed token will expiry in {} secs",
-        expires_at
-            .duration_since(SystemTime::now())
-            .unwrap()
-            .as_secs()
-    );*/
-    Ok(Token {
-        raw: raw_token,
+    Ok(AdjustedToken {
+        raw: token.raw,
         expires_at,
     })
 }
 
-fn get_expiry(jwt_body: &Value) -> AuthResult<SystemTime> {
-    let expiry = jwt_body
-        .as_object()
-        .ok_or_runtime_error(
-            AuthRuntimeErrorCode::GenericError,
-            "Failed to get JWT body json object",
-        )?
-        .get("exp")
-        .ok_or_runtime_error(
-            AuthRuntimeErrorCode::GenericError,
-            "JWT doesn't have an expiry field",
-        )?
-        .as_u64()
-        .ok_or_runtime_error(
-            AuthRuntimeErrorCode::GenericError,
-            "Failed to parse JWT expiry into unsigned integer",
-        )?;
+fn compute_leeway(period: Duration) -> AuthResult<Duration> {
+    let leeway_10_percents = period
+        .checked_div(100 / 10)
+        .ok_or_permanent_failure("Failed to divide duration")?;
 
-    Ok(SystemTime::UNIX_EPOCH + Duration::from_secs(expiry))
+    let leeway_50_percents = period
+        .checked_div(100 / 50)
+        .ok_or_permanent_failure("Failed to divide duration")?;
+
+    // At least 10 seconds.
+    let lower_bound = max(Duration::from_secs(10), leeway_10_percents);
+    // At most 30 seconds.
+    let upper_bound = min(Duration::from_secs(30), leeway_50_percents);
+    // If 50% < 10 seconds, use 50% of the period.
+    let leeway = min(lower_bound, upper_bound);
+
+    Ok(leeway)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_compute_leeway() -> AuthResult<()> {
+        assert_eq!(compute_leeway(secs(    10))?, secs( 5));
+        assert_eq!(compute_leeway(secs(    20))?, secs(10));
+        assert_eq!(compute_leeway(secs(    30))?, secs(10));
+        assert_eq!(compute_leeway(secs(    60))?, secs(10));
+        assert_eq!(compute_leeway(secs(2 * 60))?, secs(12));
+        assert_eq!(compute_leeway(secs(3 * 60))?, secs(18));
+        assert_eq!(compute_leeway(secs(4 * 60))?, secs(24));
+        assert_eq!(compute_leeway(secs(5 * 60))?, secs(30));
+        assert_eq!(compute_leeway(secs(6 * 60))?, secs(30));
+        Ok(())
+    }
+
+    fn secs(secs: u64) -> Duration {
+        Duration::from_secs(secs)
+    }
 }
