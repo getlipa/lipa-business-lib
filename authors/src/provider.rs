@@ -297,14 +297,12 @@ fn build_client(access_token: Option<&str>) -> AuthResult<Client> {
     let user_agent = "graphql-rust/0.12.0";
     let timeout = Some(Duration::from_secs(10));
 
-    let builder = Client::builder().user_agent(user_agent).timeout(timeout);
-    let builder = if let Some(access_token) = access_token {
+    let mut builder = Client::builder().user_agent(user_agent).timeout(timeout);
+    if let Some(access_token) = access_token {
         let value = HeaderValue::from_str(&format!("Bearer {}", access_token))
             .map_to_permanent_failure("Failed to build header value from str")?;
-        builder.default_headers(std::iter::once((AUTHORIZATION, value)).collect())
-    } else {
-        builder
-    };
+        builder = builder.default_headers(std::iter::once((AUTHORIZATION, value)).collect());
+    }
 
     let client = builder
         .build()
