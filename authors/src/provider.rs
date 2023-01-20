@@ -8,6 +8,8 @@ use graphql_client::Response;
 use lipa_errors::{permanent_failure, runtime_error, MapToLipaError, OptionToError};
 use log::{info, trace};
 use reqwest::blocking::Client;
+use reqwest::header::{HeaderValue, AUTHORIZATION};
+use std::time::Duration;
 
 const AUTH_EXCEPTION_CODE: &str = "authentication-exception";
 const INVALID_JWT_ERROR_CODE: &str = "invalid-jwt";
@@ -23,10 +25,10 @@ pub enum AuthLevel {
 
 pub(crate) struct AuthProvider {
     backend_url: String,
-    client: Client,
     auth_level: AuthLevel,
     wallet_keypair: KeyPair,
     auth_keypair: KeyPair,
+    client: Client,
     refresh_token: Option<String>,
 }
 
@@ -37,16 +39,13 @@ impl AuthProvider {
         wallet_keypair: KeyPair,
         auth_keypair: KeyPair,
     ) -> AuthResult<Self> {
-        let client = Client::builder()
-            .user_agent("graphql-rust/0.11.0")
-            .build()
-            .map_to_permanent_failure("Failed to build a reqwest client")?;
+        let client = build_client(None)?;
         Ok(AuthProvider {
             backend_url,
-            client,
             auth_level,
             wallet_keypair,
             auth_keypair,
+            client,
             refresh_token: None,
         })
     }
@@ -156,27 +155,13 @@ impl AuthProvider {
             signed_challenge: add_hex_prefix(&challenge_signature),
         };
 
-        let client_with_token = Client::builder()
-            .user_agent("graphql-rust/0.11.0")
-            .default_headers(
-                std::iter::once((
-                    reqwest::header::AUTHORIZATION,
-                    reqwest::header::HeaderValue::from_str(&format!("Bearer {}", access_token))
-                        .map_to_permanent_failure("Failed to build header value from str")?,
-                ))
-                .collect(),
-            )
-            .build()
-            .map_to_permanent_failure("Failed to build a reqwest client")?;
-        let response_body = post_graphql_blocking::<PrepareWalletSession, _>(
-            &client_with_token,
-            &self.backend_url,
-            variables,
-        )
-        .map_to_runtime_error(
-            AuthRuntimeErrorCode::NetworkError,
-            "Failed to get a response to a prepare_wallet_session request",
-        )?;
+        let client = build_client(Some(&access_token))?;
+        let response_body =
+            post_graphql_blocking::<PrepareWalletSession, _>(&client, &self.backend_url, variables)
+                .map_to_runtime_error(
+                    AuthRuntimeErrorCode::NetworkError,
+                    "Failed to get a response to a prepare_wallet_session request",
+                )?;
         trace!("Response body: {:?}", response_body);
 
         let data = get_response_data(&response_body)?;
@@ -195,15 +180,12 @@ impl AuthProvider {
             challenge_signature: add_hex_prefix(&challenge_signature),
             prepared_permission_token,
         };
-        let response_body = post_graphql_blocking::<UnlockWallet, _>(
-            &client_with_token,
-            &self.backend_url,
-            variables,
-        )
-        .map_to_runtime_error(
-            AuthRuntimeErrorCode::NetworkError,
-            "Failed to get a response to a unlock_wallet request",
-        )?;
+        let response_body =
+            post_graphql_blocking::<UnlockWallet, _>(&client, &self.backend_url, variables)
+                .map_to_runtime_error(
+                    AuthRuntimeErrorCode::NetworkError,
+                    "Failed to get a response to a unlock_wallet request",
+                )?;
         trace!("Response body: {:?}", response_body);
 
         let data = get_response_data(&response_body)?;
@@ -233,30 +215,16 @@ impl AuthProvider {
         wallet_pub_key_id: String,
     ) -> AuthResult<Option<String>> {
         info!("Getting business owner ...");
-        let client_with_token = Client::builder()
-            .user_agent("graphql-rust/0.11.0")
-            .default_headers(
-                std::iter::once((
-                    reqwest::header::AUTHORIZATION,
-                    reqwest::header::HeaderValue::from_str(&format!("Bearer {}", access_token))
-                        .map_to_permanent_failure("Failed to build header value from str")?,
-                ))
-                .collect(),
-            )
-            .build()
-            .map_to_permanent_failure("Failed to build a reqwest client")?;
         let variables = get_business_owner::Variables {
             owner_wallet_pub_key_id: wallet_pub_key_id,
         };
-        let response_body = post_graphql_blocking::<GetBusinessOwner, _>(
-            &client_with_token,
-            &self.backend_url,
-            variables,
-        )
-        .map_to_runtime_error(
-            AuthRuntimeErrorCode::NetworkError,
-            "Failed to get a response to a get_business_owner request",
-        )?;
+        let client = build_client(Some(&access_token))?;
+        let response_body =
+            post_graphql_blocking::<GetBusinessOwner, _>(&client, &self.backend_url, variables)
+                .map_to_runtime_error(
+                    AuthRuntimeErrorCode::NetworkError,
+                    "Failed to get a response to a get_business_owner request",
+                )?;
         trace!("Response body: {:?}", response_body);
 
         let data = get_response_data(&response_body)?;
@@ -323,6 +291,23 @@ impl AuthProvider {
 
         Ok(challenge)
     }
+}
+
+fn build_client(access_token: Option<&str>) -> AuthResult<Client> {
+    let user_agent = "graphql-rust/0.12.0";
+    let timeout = Some(Duration::from_secs(10));
+
+    let mut builder = Client::builder().user_agent(user_agent).timeout(timeout);
+    if let Some(access_token) = access_token {
+        let value = HeaderValue::from_str(&format!("Bearer {}", access_token))
+            .map_to_permanent_failure("Failed to build header value from str")?;
+        builder = builder.default_headers(std::iter::once((AUTHORIZATION, value)).collect());
+    }
+
+    let client = builder
+        .build()
+        .map_to_permanent_failure("Failed to build a reqwest client")?;
+    Ok(client)
 }
 
 fn get_response_data<Data>(response: &Response<Data>) -> AuthResult<&Data> {
