@@ -11,7 +11,7 @@ use bdk::electrum_client::Client;
 use bdk::sled::Tree;
 use bdk::wallet::AddressIndex;
 use bdk::{Balance, Error, SignOptions, SyncOptions, TransactionDetails};
-use lipa_errors::{invalid_input, permanent_failure, runtime_error, LipaError, MapToLipaError};
+use perro::{invalid_input, permanent_failure, runtime_error, MapToError, PError};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -135,7 +135,7 @@ impl Wallet {
 
         match self.prepare_drain_tx_internal(local_address, confirm_in_blocks) {
             Ok(_) => Ok(true),
-            Err(LipaError::RuntimeError {
+            Err(PError::RuntimeError {
                 code: LblRuntimeErrorCode::NotEnoughFunds,
                 ..
             }) => Ok(false),
