@@ -8,7 +8,7 @@ use bdk::keys::bip39::Mnemonic;
 use bdk::keys::DescriptorKey::Secret;
 use bdk::keys::{DerivableKey, DescriptorKey, ExtendedKey};
 use bdk::miniscript::ToPublicKey;
-use lipa_errors::{permanent_failure, MapToLipaError};
+use perro::{permanent_failure, MapToError};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use secp256k1::SECP256K1;

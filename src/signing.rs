@@ -3,7 +3,7 @@ use bdk::bitcoin::hashes::hex::FromHex;
 use bdk::bitcoin::hashes::sha256;
 use bdk::bitcoin::secp256k1::Message;
 use bdk::bitcoin::secp256k1::SecretKey;
-use lipa_errors::MapToLipaError;
+use perro::MapToError;
 use secp256k1::SECP256K1;
 
 pub fn sign(message: String, private_key: String) -> LblResult<String> {

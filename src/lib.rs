@@ -14,7 +14,7 @@ pub use crate::secrets::{
 pub use crate::signing::sign;
 pub use crate::wallet::{AddressValidationResult, Config, Tx, TxDetails, TxStatus, Wallet};
 
-pub use authors::{
+pub use honey_badger::{
     errors::{AuthError, AuthRuntimeErrorCode},
     AuthLevel,
 };

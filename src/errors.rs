@@ -1,4 +1,4 @@
-use lipa_errors::{LipaError, LipaResult};
+use perro::{PError, PResult};
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -16,6 +16,6 @@ impl Display for LblRuntimeErrorCode {
     }
 }
 
-pub type LblError = LipaError<LblRuntimeErrorCode>;
+pub type LblError = PError<LblRuntimeErrorCode>;
 
-pub(crate) type LblResult<T> = LipaResult<T, LblRuntimeErrorCode>;
+pub(crate) type LblResult<T> = PResult<T, LblRuntimeErrorCode>;
