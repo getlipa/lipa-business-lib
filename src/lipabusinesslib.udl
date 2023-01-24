@@ -242,9 +242,9 @@ dictionary TxDetails {
 
 // An authorization level
 //
-// Owner and Employee levels include the basic level privileges
+// Owner and Employee levels include the Pseudonymous level privileges
 enum AuthLevel {
-    "Basic",
+    "Pseudonymous",
     "Owner",
     "Employee",
 };
