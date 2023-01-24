@@ -250,7 +250,7 @@ enum AuthLevel {
 };
 
 interface Auth {
-    // Creates a new Auth instance.
+    // Creates a new Auth instance
     //
     // Parameters:
     // * backend_url: The URL of the backend instance to authenticate on.
@@ -258,7 +258,7 @@ interface Auth {
     // * wallet_keypair: The local wallet keypair
     // * auth_keypair: A random keypair
     //
-    // The method does not access Internet
+    // This method does not access the internet
     [Throws=AuthError]
     constructor(string backend_url, AuthLevel auth_level, KeyPair wallet_keypair, KeyPair auth_keypair);
 
@@ -271,6 +271,14 @@ interface Auth {
     // As such, the execution time of this method can vary.
     [Throws=AuthError]
     string query_token();
+
+    // Get the wallet UUID v5 from the wallet pubkey
+    //
+    // Returns an optional value. If `query_token()` has never succeeded in this Auth instance, the wallet UUID v5
+    // is unknown and None is returned. Otherwise, this method will always return the wallet UUID v5.
+    //
+    // This method does not access the internet
+    string? get_wallet_pubkey_id();
 };
 
 namespace lipabusinesslib {

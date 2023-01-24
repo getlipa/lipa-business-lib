@@ -29,4 +29,8 @@ impl Auth {
     pub fn query_token(&self) -> AuthResult<String> {
         self.auth.query_token()
     }
+
+    pub fn get_wallet_pubkey_id(&self) -> Option<String> {
+        self.auth.get_wallet_pubkey_id()
+    }
 }
