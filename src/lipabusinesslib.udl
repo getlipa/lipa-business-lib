@@ -96,13 +96,11 @@ dictionary Balance {
     u64 immature;
 };
 
-// Result from Wallet.validate_addr(string addr);
-//
-// A valid address is an address that has been verified to be usable by Wallet.prepare_drain_tx(string addr) method,
-// meaning that it's a valid bitcoin address for the correct network ( MAINNET | TESTNET | ... )
-enum AddressValidationResult {
-    "Valid",
-    "Invalid",
+// Enum listing possible errors of parsing an on-chain address.
+[Enum]
+interface AddressParsingError {
+    InvalidNetwork(Network expected, Network address);
+    Other();
 };
 
 interface Wallet {
@@ -126,7 +124,9 @@ interface Wallet {
     string get_addr();
 
     // Validates that an address is valid and the local wallet can send funds to it.
-    AddressValidationResult validate_addr(string addr);
+    // Returns a normalized representation of the address.
+    [Throws=AddressParsingError]
+    string parse_address(string address);
 
     // Constructs a tx that completely drains (sends all funds available) the wallet.
     // The tx is not actually broadcast here.

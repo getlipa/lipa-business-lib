@@ -18,7 +18,7 @@ pub fn sign(message: String, private_key: String) -> LipaResult<String> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use crate::signing::sign;
     use crate::{derive_keys, generate_mnemonic};
     use bdk::bitcoin::hashes::hex::FromHex;
