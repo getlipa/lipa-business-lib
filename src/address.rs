@@ -16,7 +16,7 @@ pub fn parse_address(
 ) -> Result<Address, AddressParsingError> {
     let bip21_prefix = "bitcoin:";
 
-    let address = from_qr(address);
+    let address = from_qr_uri(address);
 
     let address = if address.starts_with(bip21_prefix) {
         let result: Result<bip21::Uri<'_>, bip21::de::Error<_>> = Uri::from_str(&address);
@@ -38,7 +38,7 @@ pub fn parse_address(
     }
 }
 
-fn from_qr(address: String) -> String {
+fn from_qr_uri(address: String) -> String {
     if address.starts_with("BITCOIN:") {
         address.to_lowercase()
     } else {
@@ -121,7 +121,7 @@ mod tests {
     fn invalid_network() {
         let mainnet_p2wpkh =
             "bc1qhztydhu3p30h0ld5crucmmdrspp2xjtg8xr3f32708al70eegh7qaq50yw".to_string();
-        let result = parse_address(mainnet_p2wpkh.clone(), TESTNET);
+        let result = parse_address(mainnet_p2wpkh, TESTNET);
         assert!(matches!(
             result,
             Err(AddressParsingError::InvalidNetwork {
@@ -132,7 +132,7 @@ mod tests {
 
         let mainnet_p2wpkh =
             "bc1qhztydhu3p30h0ld5crucmmdrspp2xjtg8xr3f32708al70eegh7qaq50yw".to_string();
-        let result = parse_address(mainnet_p2wpkh.clone(), TESTNET);
+        let result = parse_address(mainnet_p2wpkh, TESTNET);
         assert!(matches!(
             result,
             Err(AddressParsingError::InvalidNetwork {
