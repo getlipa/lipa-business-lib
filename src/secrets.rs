@@ -194,7 +194,7 @@ fn get_account_derivation_path(network: Network) -> &'static str {
 }
 
 fn key_to_wpkh_descriptor(key: &str) -> String {
-    format!("wpkh({})", key)
+    format!("wpkh({key})")
 }
 
 pub fn generate_keypair() -> KeyPair {
