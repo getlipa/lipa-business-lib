@@ -209,7 +209,7 @@ pub fn generate_keypair() -> KeyPair {
 }
 
 #[cfg(test)]
-pub mod test {
+mod tests {
     use super::*;
     use bdk::bitcoin::hashes::hex::FromHex;
     use bdk::bitcoin::secp256k1::{PublicKey, SecretKey};
