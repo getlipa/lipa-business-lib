@@ -96,8 +96,8 @@ dictionary Balance {
     u64 immature;
 };
 
-// Enum listing possible errors of parsing an on-chain address.
-[Enum]
+// Lists possible errors of parsing an on-chain address.
+[Error]
 interface AddressParsingError {
     InvalidNetwork(Network expected, Network address);
     Other();
