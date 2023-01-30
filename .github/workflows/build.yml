@@ -47,7 +47,7 @@ jobs:
       - name: Build target
         uses: actions-rs/cargo@v1
         with:
-          use-cross: true
+          use-cross: false
           command: build
           args: --target ${{ matrix.target }}
   build-android:
