@@ -1,8 +1,7 @@
-use perro::{PError, PResult};
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum LblRuntimeErrorCode {
+pub enum WalletRuntimeErrorCode {
     ElectrumServiceUnavailable,
     NotEnoughFunds,
     RemoteServiceUnavailable,
@@ -10,12 +9,12 @@ pub enum LblRuntimeErrorCode {
     GenericError,
 }
 
-impl Display for LblRuntimeErrorCode {
+impl Display for WalletRuntimeErrorCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")
     }
 }
 
-pub type LblError = PError<LblRuntimeErrorCode>;
+pub type Error = perro::Error<WalletRuntimeErrorCode>;
 
-pub(crate) type LblResult<T> = PResult<T, LblRuntimeErrorCode>;
+pub(crate) type Result<T> = std::result::Result<T, perro::Error<WalletRuntimeErrorCode>>;
