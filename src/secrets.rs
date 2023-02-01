@@ -143,7 +143,8 @@ enum DescriptorKind {
 /// from the master xpriv using this path
 /// - `key_derivation_path`: this is the derivation path that is applied to the embedded xkey when
 /// using the built descriptor
-/// - `public`: if true, the embedded xkey will be an xpub, otherwise will be an xpriv
+/// - `kind`: enum defining whether the xkey embedded in the returned descriptor should be an xpub
+/// or an xpriv
 fn build_descriptor(
     master_xpriv: ExtendedPrivKey,
     origin_derivation_path: &str,
