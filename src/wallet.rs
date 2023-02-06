@@ -16,7 +16,7 @@ use bdk::{Balance, Error, SignOptions, SyncOptions, TransactionDetails};
 use perro::{invalid_input, permanent_failure, runtime_error, MapToError};
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
 pub struct Config {
@@ -30,7 +30,8 @@ type BdkWallet = bdk::Wallet<Tree>;
 
 pub struct Wallet {
     blockchain: ElectrumBlockchain,
-    wallet: Arc<Mutex<BdkWallet>>,
+    wallet: Mutex<BdkWallet>,
+    wallet_to_sync: Mutex<BdkWallet>,
 }
 
 pub struct Tx {
@@ -66,24 +67,13 @@ impl Wallet {
         )?;
         let blockchain = ElectrumBlockchain::from(client);
 
-        let db_path = Path::new(&config.wallet_db_path);
-        let db = sled::open(db_path).map_to_permanent_failure("Failed to open sled database")?;
-        let db_tree = db
-            .open_tree("bdk-wallet-database")
-            .map_to_permanent_failure("Failed to open sled database tree")?;
+        let (wallet, wallet_to_sync) = Self::load_wallets(&config)?;
 
-        let wallet = bdk::Wallet::new(
-            &config.watch_descriptor,
-            Some(&get_change_descriptor_from_descriptor(
-                &config.watch_descriptor,
-            )?),
-            config.network,
-            db_tree,
-        )
-        .map_to_permanent_failure("Failed to create wallet")?;
-        let wallet = Arc::new(Mutex::new(wallet));
-
-        Ok(Self { blockchain, wallet })
+        Ok(Self {
+            blockchain,
+            wallet: Mutex::new(wallet),
+            wallet_to_sync: Mutex::new(wallet_to_sync),
+        })
     }
 
     pub fn get_balance(&self) -> Result<Balance> {
@@ -359,8 +349,8 @@ impl Wallet {
     }
 
     pub fn sync(&self) -> Result<()> {
-        let wallet = self.wallet.lock().unwrap();
-        wallet
+        let mut wallet_to_sync = self.wallet_to_sync.lock().unwrap();
+        wallet_to_sync
             .sync(&self.blockchain, SyncOptions::default())
             .map_err(|e| match e {
                 Error::Electrum(_) => {
@@ -371,7 +361,50 @@ impl Wallet {
                     WalletRuntimeErrorCode::GenericError,
                     "Failed to sync the BDK wallet",
                 ),
-            })
+            })?;
+        let mut wallet = self.wallet.lock().unwrap();
+        std::mem::swap(&mut *wallet_to_sync, &mut *wallet);
+        Ok(())
+    }
+
+    fn load_wallets(config: &Config) -> Result<(BdkWallet, BdkWallet)> {
+        let db_path = Path::new(&config.wallet_db_path);
+        let db = sled::open(db_path).map_to_permanent_failure("Failed to open sled database")?;
+
+        let change_descriptor = get_change_descriptor_from_descriptor(&config.watch_descriptor)?;
+        let change_descriptor = Some(&change_descriptor);
+
+        let wallet_1 = {
+            let db_tree = db
+                .open_tree("bdk-wallet-database-1")
+                .map_to_permanent_failure("Failed to open sled database tree")?;
+            bdk::Wallet::new(
+                &config.watch_descriptor,
+                change_descriptor,
+                config.network,
+                db_tree,
+            )
+            .map_to_permanent_failure("Failed to create wallet")?
+        };
+
+        let wallet_2 = {
+            let db_tree = db
+                .open_tree("bdk-wallet-database-2")
+                .map_to_permanent_failure("Failed to open sled database tree")?;
+            bdk::Wallet::new(
+                &config.watch_descriptor,
+                change_descriptor,
+                config.network,
+                db_tree,
+            )
+            .map_to_permanent_failure("Failed to create wallet")?
+        };
+
+        if Self::get_synced_tip_height(&wallet_1)? > Self::get_synced_tip_height(&wallet_2)? {
+            Ok((wallet_1, wallet_2))
+        } else {
+            Ok((wallet_2, wallet_1))
+        }
     }
 
     fn get_synced_tip_height(wallet: &BdkWallet) -> Result<u32> {
