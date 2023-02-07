@@ -1,0 +1,10 @@
+.DS_Store
+.idea
+
+/bindings
+
+.bdk-database*
+
+# Added by cargo
+/target
+/Cargo.lock

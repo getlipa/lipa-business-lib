@@ -1,0 +1,28 @@
+name: Integration Tests with Nigiri
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+jobs:
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Run Nigiri
+        uses: vulpemventures/nigiri-github-action@master
+        with:
+          use_liquid: false
+          use_ln: false
+      - name: Run integration tests
+        run: |
+          cargo test --features nigiri --test '*' -- --test-threads 1 # runs integration tests only and sequentially
