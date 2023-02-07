@@ -1,11 +1,12 @@
-use crate::errors::{LipaResult, MapToLipaError};
+use crate::errors::Result;
 use bdk::bitcoin::hashes::hex::FromHex;
 use bdk::bitcoin::hashes::sha256;
 use bdk::bitcoin::secp256k1::Message;
 use bdk::bitcoin::secp256k1::SecretKey;
+use perro::MapToError;
 use secp256k1::SECP256K1;
 
-pub fn sign(message: String, private_key: String) -> LipaResult<String> {
+pub fn sign(message: String, private_key: String) -> Result<String> {
     let message = Message::from_hashed_data::<sha256::Hash>(message.as_bytes());
     let secret_key_bytes =
         Vec::from_hex(&private_key).map_to_invalid_input("Invalid private key string")?;

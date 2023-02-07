@@ -1,15 +1,70 @@
 mod setup;
 
+use uniffi_lipabusinesslib::{Config, Wallet, WalletError, WalletRuntimeErrorCode};
+
 use bdk::bitcoin::consensus::deserialize;
 use bdk::bitcoin::psbt::Psbt;
 use bdk::bitcoin::{Address, Network, Txid};
 use std::fs::remove_dir_all;
+use std::net::TcpListener;
 use std::str::FromStr;
-use uniffi_lipabusinesslib::{Config, LipaError, RuntimeErrorCode, Wallet};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread::{sleep, spawn};
+use std::time::{Duration, Instant};
 
 const WATCH_DESCRIPTOR_WITH_FUNDS: &str = "wpkh([aed2a027/84'/1'/0']tpubDCvyR4gGk5U6r1Q1HMQtgZYMD3a9bVyt7Tv9BWgcBCQsff4aqR7arUGPTMaUbVwaH8TeaK924GJr9nHyGPBtqSCD8BCjMnJb1qZFjK4ACfL/0/*)";
 
 const WATCH_DESCRIPTOR_WITHOUT_FUNDS: &str = "wpkh([e6224ca3/84'/1'/0']tpubDCvC1cs5x9Jf3k3WKSPtg3dinzNZ5xfnfKRjWzPV8ckXewY2eKAAb4g3HTb3HLBVBmUy688fYGU3LJjDtqrSiuDzM1wi8JBQoTYLL8KSYSc/0/*)";
+
+#[test]
+fn test_sync() {
+    let _ = remove_dir_all(".bdk-database-sync");
+
+    let request_received = Arc::new(AtomicBool::new(false));
+
+    // Start a TCP server which hangs for 3 secods.
+    {
+        let request_received = Arc::clone(&request_received);
+        let _server = spawn(move || {
+            let listener = TcpListener::bind("localhost:8888").unwrap();
+            for stream in listener.incoming() {
+                request_received.store(true, Ordering::SeqCst);
+                let _stream = stream.unwrap();
+                sleep(Duration::from_secs(3));
+            }
+        });
+        // Let the server thread start.
+        sleep(Duration::from_millis(100));
+    }
+
+    let wallet = Wallet::new(Config {
+        electrum_url: "ssl://localhost:8888".to_string(),
+        wallet_db_path: ".bdk-database-sync".to_string(),
+        network: Network::Testnet,
+        watch_descriptor: WATCH_DESCRIPTOR_WITH_FUNDS.to_string(),
+    })
+    .unwrap();
+    let wallet = Arc::new(wallet);
+
+    {
+        // Start wallet.sync() in another thread.
+        let wallet = Arc::clone(&wallet);
+        let _syncing_thread = spawn(move || wallet.sync().unwrap());
+    }
+
+    // What for the wallet to send a request.
+    while request_received.load(Ordering::SeqCst) == false {
+        sleep(Duration::from_millis(100));
+    }
+    sleep(Duration::from_millis(100));
+
+    // get_balance() does not hang.
+
+    let start = Instant::now();
+    let _ = wallet.get_balance().unwrap();
+    assert!(start.elapsed() < Duration::from_secs(2));
+}
 
 #[test]
 fn test_get_balance_testnet_electrum() {
@@ -49,8 +104,8 @@ fn test_prepare_drain_tx() {
     assert!(result.is_err());
     assert!(matches!(
         result,
-        Err(LipaError::RuntimeError {
-            code: RuntimeErrorCode::SendToOurselves,
+        Err(WalletError::RuntimeError {
+            code: WalletRuntimeErrorCode::SendToOurselves,
             ..
         })
     ));
@@ -98,8 +153,8 @@ fn test_drain_empty_wallet() {
     assert!(drain_tx_result.is_err());
     assert!(matches!(
         drain_tx_result,
-        Err(LipaError::RuntimeError {
-            code: RuntimeErrorCode::NotEnoughFunds,
+        Err(WalletError::RuntimeError {
+            code: WalletRuntimeErrorCode::NotEnoughFunds,
             ..
         })
     ));

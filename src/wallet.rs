@@ -1,5 +1,6 @@
 use crate::address::{parse_address, AddressParsingError};
-use crate::errors::*;
+use crate::errors::Result;
+use crate::WalletRuntimeErrorCode;
 
 use bdk::bitcoin::blockdata::script::Script;
 use bdk::bitcoin::blockdata::transaction::TxOut;
@@ -12,9 +13,10 @@ use bdk::electrum_client::Client;
 use bdk::sled::Tree;
 use bdk::wallet::AddressIndex;
 use bdk::{Balance, Error, SignOptions, SyncOptions, TransactionDetails};
+use perro::{invalid_input, permanent_failure, runtime_error, MapToError};
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
 pub struct Config {
@@ -28,7 +30,8 @@ type BdkWallet = bdk::Wallet<Tree>;
 
 pub struct Wallet {
     blockchain: ElectrumBlockchain,
-    wallet: Arc<Mutex<BdkWallet>>,
+    wallet: Mutex<BdkWallet>,
+    wallet_to_sync: Mutex<BdkWallet>,
 }
 
 pub struct Tx {
@@ -57,34 +60,23 @@ pub struct TxDetails {
 }
 
 impl Wallet {
-    pub fn new(config: Config) -> LipaResult<Self> {
+    pub fn new(config: Config) -> Result<Self> {
         let client = Client::new(&config.electrum_url).map_to_runtime_error(
-            RuntimeErrorCode::RemoteServiceUnavailable,
+            WalletRuntimeErrorCode::RemoteServiceUnavailable,
             "Failed to create an electrum client",
         )?;
         let blockchain = ElectrumBlockchain::from(client);
 
-        let db_path = Path::new(&config.wallet_db_path);
-        let db = sled::open(db_path).map_to_permanent_failure("Failed to open sled database")?;
-        let db_tree = db
-            .open_tree("bdk-wallet-database")
-            .map_to_permanent_failure("Failed to open sled database tree")?;
+        let (wallet, wallet_to_sync) = Self::load_wallets(&config)?;
 
-        let wallet = bdk::Wallet::new(
-            &config.watch_descriptor,
-            Some(&get_change_descriptor_from_descriptor(
-                &config.watch_descriptor,
-            )?),
-            config.network,
-            db_tree,
-        )
-        .map_to_permanent_failure("Failed to create wallet")?;
-        let wallet = Arc::new(Mutex::new(wallet));
-
-        Ok(Self { blockchain, wallet })
+        Ok(Self {
+            blockchain,
+            wallet: Mutex::new(wallet),
+            wallet_to_sync: Mutex::new(wallet_to_sync),
+        })
     }
 
-    pub fn get_balance(&self) -> LipaResult<Balance> {
+    pub fn get_balance(&self) -> Result<Balance> {
         let wallet = self.wallet.lock().unwrap();
 
         let balance = wallet
@@ -94,7 +86,10 @@ impl Wallet {
         Ok(balance)
     }
 
-    pub fn parse_address(&self, address: String) -> Result<String, AddressParsingError> {
+    pub fn parse_address(
+        &self,
+        address: String,
+    ) -> std::result::Result<String, AddressParsingError> {
         let network = self.wallet.lock().unwrap().network();
         parse_address(address, network).map(|a| a.to_string())
     }
@@ -109,7 +104,7 @@ impl Wallet {
     // affordable.
     //
     // We are careful about dropping the prepared tx asap, as we don't want this tx to ever be signed.
-    pub fn is_drain_tx_affordable(&self, confirm_in_blocks: u32) -> LipaResult<bool> {
+    pub fn is_drain_tx_affordable(&self, confirm_in_blocks: u32) -> Result<bool> {
         let local_address = {
             self.wallet
                 .lock()
@@ -121,15 +116,15 @@ impl Wallet {
 
         match self.prepare_drain_tx_internal(local_address, confirm_in_blocks) {
             Ok(_) => Ok(true),
-            Err(LipaError::RuntimeError {
-                code: RuntimeErrorCode::NotEnoughFunds,
+            Err(perro::Error::RuntimeError {
+                code: WalletRuntimeErrorCode::NotEnoughFunds,
                 ..
             }) => Ok(false),
             Err(e) => Err(e),
         }
     }
 
-    pub fn prepare_drain_tx(&self, address: String, confirm_in_blocks: u32) -> LipaResult<Tx> {
+    pub fn prepare_drain_tx(&self, address: String, confirm_in_blocks: u32) -> Result<Tx> {
         let wallet = self.wallet.lock().unwrap();
         let network = wallet.network();
         let address =
@@ -146,7 +141,7 @@ impl Wallet {
             .map_to_permanent_failure("Failed to check if address belongs to the wallet")?;
         if address_is_mine {
             return Err(runtime_error(
-                RuntimeErrorCode::SendToOurselves,
+                WalletRuntimeErrorCode::SendToOurselves,
                 "Trying to drain wallet to address belonging to the wallet",
             ));
         }
@@ -155,16 +150,12 @@ impl Wallet {
         self.prepare_drain_tx_internal(address, confirm_in_blocks)
     }
 
-    fn prepare_drain_tx_internal(
-        &self,
-        address: Address,
-        confirm_in_blocks: u32,
-    ) -> LipaResult<Tx> {
+    fn prepare_drain_tx_internal(&self, address: Address, confirm_in_blocks: u32) -> Result<Tx> {
         let fee_rate = self
             .blockchain
             .estimate_fee(confirm_in_blocks as usize)
             .map_to_runtime_error(
-                RuntimeErrorCode::ElectrumServiceUnavailable,
+                WalletRuntimeErrorCode::ElectrumServiceUnavailable,
                 "Failed to estimate fee for drain tx",
             )?;
 
@@ -183,9 +174,10 @@ impl Wallet {
             .enable_rbf()
             .allow_dust(false);
 
-        let (psbt, tx_details) = tx_builder
-            .finish()
-            .map_to_runtime_error(RuntimeErrorCode::NotEnoughFunds, "Failed to create PSBT")?;
+        let (psbt, tx_details) = tx_builder.finish().map_to_runtime_error(
+            WalletRuntimeErrorCode::NotEnoughFunds,
+            "Failed to create PSBT",
+        )?;
 
         let fee = match tx_details.fee {
             None => return Err(permanent_failure("Empty fee using an Electrum backend")),
@@ -206,7 +198,7 @@ impl Wallet {
         &self,
         tx_blob: Vec<u8>,
         spend_descriptor: String,
-    ) -> LipaResult<TxDetails> {
+    ) -> Result<TxDetails> {
         let mut psbt = deserialize::<Psbt>(&tx_blob).map_to_invalid_input("Invalid tx blob")?;
 
         let signing_wallet = bdk::Wallet::new(
@@ -226,7 +218,7 @@ impl Wallet {
 
         let tx = psbt.extract_tx();
         self.blockchain.broadcast(&tx).map_to_runtime_error(
-            RuntimeErrorCode::ElectrumServiceUnavailable,
+            WalletRuntimeErrorCode::ElectrumServiceUnavailable,
             "Failed to broadcast tx",
         )?;
 
@@ -240,14 +232,14 @@ impl Wallet {
         Self::map_to_tx_details(tx, &wallet)
     }
 
-    pub fn get_tx_status(&self, txid: String) -> LipaResult<TxStatus> {
+    pub fn get_tx_status(&self, txid: String) -> Result<TxStatus> {
         let txid = Txid::from_str(&txid).map_to_invalid_input("Invalid tx id")?;
 
         let wallet = self.wallet.lock().unwrap();
         Self::get_tx_status_internal(&wallet, txid)
     }
 
-    pub fn get_spending_txs(&self) -> LipaResult<Vec<TxDetails>> {
+    pub fn get_spending_txs(&self) -> Result<Vec<TxDetails>> {
         let wallet = self.wallet.lock().unwrap();
 
         let include_raw = true;
@@ -265,7 +257,7 @@ impl Wallet {
         Ok(txs_details)
     }
 
-    pub fn get_addr(&self) -> LipaResult<String> {
+    pub fn get_addr(&self) -> Result<String> {
         let wallet = self.wallet.lock().unwrap();
 
         let address = wallet
@@ -282,7 +274,7 @@ impl Wallet {
         address: String,
         amount: u64,
         confirm_in_blocks: u32,
-    ) -> LipaResult<Tx> {
+    ) -> Result<Tx> {
         let wallet = self.wallet.lock().unwrap();
         let network = wallet.network();
         let address =
@@ -299,7 +291,7 @@ impl Wallet {
             .map_to_permanent_failure("Failed to check if address belongs to the wallet")?;
         if address_is_mine {
             return Err(runtime_error(
-                RuntimeErrorCode::SendToOurselves,
+                WalletRuntimeErrorCode::SendToOurselves,
                 "Trying to drain wallet to address belonging to the wallet",
             ));
         }
@@ -309,7 +301,7 @@ impl Wallet {
             .blockchain
             .estimate_fee(confirm_in_blocks as usize)
             .map_to_runtime_error(
-                RuntimeErrorCode::ElectrumServiceUnavailable,
+                WalletRuntimeErrorCode::ElectrumServiceUnavailable,
                 "Failed to estimate fee for send tx",
             )?;
 
@@ -327,9 +319,10 @@ impl Wallet {
             .fee_rate(fee_rate)
             .enable_rbf();
 
-        let (psbt, tx_details) = tx_builder
-            .finish()
-            .map_to_runtime_error(RuntimeErrorCode::NotEnoughFunds, "Failed to create PSBT")?;
+        let (psbt, tx_details) = tx_builder.finish().map_to_runtime_error(
+            WalletRuntimeErrorCode::NotEnoughFunds,
+            "Failed to create PSBT",
+        )?;
 
         let fee = match tx_details.fee {
             None => return Err(permanent_failure("Empty fee using an Electrum backend")),
@@ -346,7 +339,7 @@ impl Wallet {
         Ok(tx)
     }
 
-    fn get_tx_status_internal(wallet: &bdk::Wallet<Tree>, txid: Txid) -> LipaResult<TxStatus> {
+    fn get_tx_status_internal(wallet: &bdk::Wallet<Tree>, txid: Txid) -> Result<TxStatus> {
         let tip_height = Self::get_synced_tip_height(wallet)?;
         let include_raw = false;
         let tx = wallet
@@ -355,23 +348,66 @@ impl Wallet {
         Ok(Self::to_tx_status(tx, tip_height))
     }
 
-    pub fn sync(&self) -> LipaResult<()> {
-        let wallet = self.wallet.lock().unwrap();
-        wallet
+    pub fn sync(&self) -> Result<()> {
+        let mut wallet_to_sync = self.wallet_to_sync.lock().unwrap();
+        wallet_to_sync
             .sync(&self.blockchain, SyncOptions::default())
             .map_err(|e| match e {
                 Error::Electrum(_) => {
-                    runtime_error(RuntimeErrorCode::ElectrumServiceUnavailable, e)
+                    runtime_error(WalletRuntimeErrorCode::ElectrumServiceUnavailable, e)
                 }
                 Error::Sled(e) => permanent_failure(e),
                 _ => runtime_error(
-                    RuntimeErrorCode::GenericError,
+                    WalletRuntimeErrorCode::GenericError,
                     "Failed to sync the BDK wallet",
                 ),
-            })
+            })?;
+        let mut wallet = self.wallet.lock().unwrap();
+        std::mem::swap(&mut *wallet_to_sync, &mut *wallet);
+        Ok(())
     }
 
-    fn get_synced_tip_height(wallet: &BdkWallet) -> LipaResult<u32> {
+    fn load_wallets(config: &Config) -> Result<(BdkWallet, BdkWallet)> {
+        let db_path = Path::new(&config.wallet_db_path);
+        let db = sled::open(db_path).map_to_permanent_failure("Failed to open sled database")?;
+
+        let change_descriptor = get_change_descriptor_from_descriptor(&config.watch_descriptor)?;
+        let change_descriptor = Some(&change_descriptor);
+
+        let wallet_1 = {
+            let db_tree = db
+                .open_tree("bdk-wallet-database-1")
+                .map_to_permanent_failure("Failed to open sled database tree")?;
+            bdk::Wallet::new(
+                &config.watch_descriptor,
+                change_descriptor,
+                config.network,
+                db_tree,
+            )
+            .map_to_permanent_failure("Failed to create wallet")?
+        };
+
+        let wallet_2 = {
+            let db_tree = db
+                .open_tree("bdk-wallet-database-2")
+                .map_to_permanent_failure("Failed to open sled database tree")?;
+            bdk::Wallet::new(
+                &config.watch_descriptor,
+                change_descriptor,
+                config.network,
+                db_tree,
+            )
+            .map_to_permanent_failure("Failed to create wallet")?
+        };
+
+        if Self::get_synced_tip_height(&wallet_1)? > Self::get_synced_tip_height(&wallet_2)? {
+            Ok((wallet_1, wallet_2))
+        } else {
+            Ok((wallet_2, wallet_1))
+        }
+    }
+
+    fn get_synced_tip_height(wallet: &BdkWallet) -> Result<u32> {
         match wallet
             .database()
             .get_sync_time()
@@ -382,7 +418,7 @@ impl Wallet {
         }
     }
 
-    fn get_confirmed_utxo_outpoints(wallet: &bdk::Wallet<Tree>) -> LipaResult<Vec<OutPoint>> {
+    fn get_confirmed_utxo_outpoints(wallet: &bdk::Wallet<Tree>) -> Result<Vec<OutPoint>> {
         let mut confirmed_utxo_outpoints: Vec<OutPoint> = Vec::new();
 
         for utxo in wallet
@@ -402,7 +438,7 @@ impl Wallet {
         Ok(confirmed_utxo_outpoints)
     }
 
-    fn map_to_tx_details(tx: TransactionDetails, wallet: &BdkWallet) -> LipaResult<TxDetails> {
+    fn map_to_tx_details(tx: TransactionDetails, wallet: &BdkWallet) -> Result<TxDetails> {
         let tip_height = Self::get_synced_tip_height(wallet)?;
 
         let raw_tx = tx
@@ -436,7 +472,7 @@ impl Wallet {
         })
     }
 
-    fn find_foreign_output(outputs: &Vec<TxOut>, wallet: &BdkWallet) -> LipaResult<Option<Script>> {
+    fn find_foreign_output(outputs: &Vec<TxOut>, wallet: &BdkWallet) -> Result<Option<Script>> {
         // Waiting for Iterator::try_find() to become stable.
         for output in outputs {
             if !wallet
@@ -469,7 +505,7 @@ impl Wallet {
     }
 }
 
-fn get_change_descriptor_from_descriptor(descriptor: &str) -> LipaResult<String> {
+fn get_change_descriptor_from_descriptor(descriptor: &str) -> Result<String> {
     if !descriptor.ends_with("0/*)") {
         return Err(invalid_input(
             "Invalid descriptor: Descriptor doesn't end with \"0/*)\". Could it already be a change descriptor?",
@@ -486,9 +522,7 @@ fn get_change_descriptor_from_descriptor(descriptor: &str) -> LipaResult<String>
 }
 
 // Waiting for Iterator::try_collect() to become stable.
-fn try_collect<T, E, I: std::iter::IntoIterator<Item = Result<T, E>>>(
-    iter: I,
-) -> Result<Vec<T>, E> {
+fn try_collect<T, I: std::iter::IntoIterator<Item = Result<T>>>(iter: I) -> Result<Vec<T>> {
     let mut vec = Vec::new();
     for item in iter {
         vec.push(item?);
