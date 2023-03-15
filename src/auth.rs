@@ -1,5 +1,5 @@
 use crate::KeyPair;
-use honey_badger::errors::Result;
+use honey_badger::graphql::errors::Result;
 use honey_badger::AuthLevel;
 
 pub struct Auth {

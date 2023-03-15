@@ -16,10 +16,10 @@ pub use crate::secrets::{
 pub use crate::signing::sign;
 pub use crate::wallet::{Config, Tx, TxDetails, TxStatus, Wallet};
 
-pub use honey_badger::{
-    errors::{AuthRuntimeErrorCode, Error as AuthError},
-    AuthLevel,
+pub use honey_badger::graphql::errors::{
+    Error as AuthError, GraphQlRuntimeErrorCode as AuthRuntimeErrorCode,
 };
+pub use honey_badger::AuthLevel;
 
 use bdk::bitcoin::Network;
 use bdk::Balance;

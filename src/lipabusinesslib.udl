@@ -47,8 +47,14 @@ interface WalletError {
 // A code that specifies an Auth RuntimeError that ocurred
 enum AuthRuntimeErrorCode {
     "AuthServiceError", // An error occurred with the authentication process. Please try again.
+    "AccessExpired", // Access to the backed services has expired
     "NetworkError", // Failed to get a response from a remote service. Could there be a loss of internet connection?
     "GenericError", // A generic error for unexpected/unknown runtime errors
+
+    // Due to some design flows in wild libraries the following values must be declared here,
+    // but are not actually possible.
+    "CorruptData",
+    "ObjectNotFound",
 };
 
 [Error]
