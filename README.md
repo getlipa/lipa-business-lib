@@ -1,8 +1,5 @@
 # lipa-business-lib (LBL)
 
-> **Warning**
-> This library is not production ready yet.
-
 A Rust library that implements the main cryptography and Bitcoin on-chain logic of the lipa wallet for business app.
 
 ***
