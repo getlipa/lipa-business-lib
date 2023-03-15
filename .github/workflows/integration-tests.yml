@@ -21,6 +21,7 @@ jobs:
       - name: Run Nigiri
         uses: vulpemventures/nigiri-github-action@master
         with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
           use_liquid: false
           use_ln: false
       - name: Run integration tests

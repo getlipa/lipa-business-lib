@@ -69,6 +69,7 @@ jobs:
       - name: Build target
         uses: actions-rs/cargo@v1
         with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
           use-cross: true
           command: build
           args: --target ${{ matrix.target }}
