@@ -24,7 +24,7 @@ uniffi = "0.23.0"
 simplelog = { version ="0.12.0", features = ["test"], optional = true }
 
 perro = { git = "https://github.com/getlipa/perro", tag = "v1.0.0" }
-honey-badger = { git = "https://github.com/getlipa/honey-badger", tag = "v1.0.1"  }
+honey-badger = { git = "https://github.com/getlipa/honey-badger", tag = "v1.0.3"  }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 oslog = "0.2.0"
