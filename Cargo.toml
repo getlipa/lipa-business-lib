@@ -16,7 +16,7 @@ bip21 = "0.2.0"
 log = "0.4.17"
 rand = "0.8.5"
 # Explicitly depend on secp256k1 for secp256k1::SECP256K1.
-secp256k1 = { version = "0.24.3", features = ["global-context"] }
+secp256k1 = { version = "0.27.0", features = ["global-context"] }
 sled = "0.34.7"
 thiserror = "1.0.38"
 uniffi = "0.23.0"
