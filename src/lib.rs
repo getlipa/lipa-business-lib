@@ -11,7 +11,8 @@ pub use crate::auth::Auth;
 pub use crate::errors::{Error as WalletError, WalletRuntimeErrorCode};
 pub use crate::native_logger::init_native_logger_once;
 pub use crate::secrets::{
-    derive_keys, generate_keypair, generate_mnemonic, Descriptors, KeyPair, WalletKeys,
+    derive_keys, generate_keypair, generate_mnemonic, words_by_prefix, Descriptors, KeyPair,
+    WalletKeys,
 };
 pub use crate::signing::sign;
 pub use crate::wallet::{Config, Tx, TxDetails, TxStatus, Wallet};
