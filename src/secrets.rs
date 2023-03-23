@@ -4,7 +4,7 @@ use bdk::bitcoin::secp256k1::PublicKey;
 use bdk::bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, KeySource};
 use bdk::bitcoin::Network;
 use bdk::descriptor::Segwitv0;
-use bdk::keys::bip39::Mnemonic;
+use bdk::keys::bip39::{Language, Mnemonic};
 use bdk::keys::DescriptorKey::Secret;
 use bdk::keys::{DerivableKey, DescriptorKey, ExtendedKey};
 use bdk::miniscript::ToPublicKey;
@@ -210,6 +210,14 @@ pub fn generate_keypair() -> KeyPair {
     }
 }
 
+pub fn words_by_prefix(prefix: String) -> Vec<String> {
+    Language::English
+        .words_by_prefix(&prefix)
+        .iter()
+        .map(|w| w.to_string())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -326,5 +334,16 @@ mod tests {
         let keypair = generate_keypair();
 
         check_keys_match(keypair);
+    }
+
+    #[test]
+    fn test_words_by_prefix() {
+        assert_eq!(words_by_prefix("".to_string()).len(), 2048);
+        assert_eq!(words_by_prefix("s".to_string()).len(), 250);
+        assert_eq!(words_by_prefix("sc".to_string()).len(), 15);
+        assert_eq!(words_by_prefix("sch".to_string()), vec!["scheme", "school"]);
+        assert_eq!(words_by_prefix("sche".to_string()), vec!["scheme"]);
+        assert_eq!(words_by_prefix("scheme".to_string()), vec!["scheme"]);
+        assert_eq!(words_by_prefix("schemelol".to_string()).len(), 0);
     }
 }

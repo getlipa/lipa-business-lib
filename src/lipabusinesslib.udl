@@ -305,4 +305,8 @@ namespace lipabusinesslib {
 
     // Generate a new keypair. Used for authentication with the backend.
     KeyPair generate_keypair();
+
+    // Return a list of valid BIP-39 English words starting with the prefix.
+    // Calling this function with empty prefix will return the full list of BIP-39 words.
+    sequence<string> words_by_prefix(string prefix);
 };
