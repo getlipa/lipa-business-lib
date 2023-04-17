@@ -11,7 +11,7 @@ name = "uniffi_lipabusinesslib"
 nigiri = ["simplelog"]
 
 [dependencies]
-bdk = { version = "0.27.0", features = ["keys-bip39"] }
+bdk = { version = "0.28.0", features = ["keys-bip39"] }
 bip21 = "0.2.0"
 log = "0.4.17"
 rand = "0.8.5"
@@ -24,7 +24,7 @@ uniffi = "0.23.0"
 simplelog = { version ="0.12.0", features = ["test"], optional = true }
 
 perro = { git = "https://github.com/getlipa/perro", tag = "v1.0.0" }
-honey-badger = { git = "https://github.com/getlipa/wild", tag = "v1.0.4" }
+honey-badger = { git = "https://github.com/getlipa/wild", tag = "v1.0.5" }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 oslog = "0.2.0"
