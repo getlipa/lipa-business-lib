@@ -12,7 +12,7 @@ nigiri = ["simplelog"]
 
 [dependencies]
 bdk = { version = "0.28.0", features = ["keys-bip39"] }
-bip21 = "0.2.0"
+bip21 = "0.3.1"
 log = "0.4.18"
 rand = "0.8.5"
 # Explicitly depend on secp256k1 for secp256k1::SECP256K1.
