@@ -49,6 +49,7 @@ enum AuthRuntimeErrorCode {
     "AuthServiceError", // An error occurred with the authentication process. Please try again.
     "AccessExpired", // Access to the backed services has expired
     "NetworkError", // Failed to get a response from a remote service. Could there be a loss of internet connection?
+    "RemoteServiceUnavailable", // The remote service returned a 502 HTTP status
     "GenericError", // A generic error for unexpected/unknown runtime errors
 
     // Due to some design flows in wild libraries the following values must be declared here,
