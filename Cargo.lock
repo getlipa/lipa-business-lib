@@ -499,7 +499,7 @@ dependencies = [
 [[package]]
 name = "graphql"
 version = "0.1.0"
-source = "git+https://github.com/getlipa/wild?tag=v1.2.0#7d5fe7829afaefea8252ce2f1f52e5009c1d9d91"
+source = "git+https://github.com/getlipa/wild?tag=v1.2.1#343dfa9fea934af5fb985504226586ca940c7d43"
 dependencies = [
  "graphql_client",
  "log",
@@ -610,7 +610,7 @@ dependencies = [
 [[package]]
 name = "honey-badger"
 version = "1.0.1"
-source = "git+https://github.com/getlipa/wild?tag=v1.2.0#7d5fe7829afaefea8252ce2f1f52e5009c1d9d91"
+source = "git+https://github.com/getlipa/wild?tag=v1.2.1#343dfa9fea934af5fb985504226586ca940c7d43"
 dependencies = [
  "base64 0.21.2",
  "bdk",
