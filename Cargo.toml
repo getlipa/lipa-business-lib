@@ -33,5 +33,5 @@ oslog = "0.2.0"
 android_logger = "0.13"
 
 [build-dependencies]
-camino = "1.1.1"
+camino = "1.1.6"
 uniffi_bindgen = "0.24.0"
