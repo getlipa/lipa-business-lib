@@ -499,11 +499,11 @@ dependencies = [
 [[package]]
 name = "graphql"
 version = "0.1.0"
-source = "git+https://github.com/getlipa/wild?tag=v1.4.0#d0c704b55506b305548e7697d69401487590432c"
+source = "git+https://github.com/getlipa/wild?tag=v1.4.1#cfa2bc1e2043cb889be6ee5ee582d388748f5c0d"
 dependencies = [
  "graphql_client",
  "log",
- "perro 1.0.1 (git+https://github.com/getlipa/perro?tag=v1.0.1)",
+ "perro",
  "reqwest",
  "serde",
 ]
@@ -610,7 +610,7 @@ dependencies = [
 [[package]]
 name = "honey-badger"
 version = "1.0.1"
-source = "git+https://github.com/getlipa/wild?tag=v1.4.0#d0c704b55506b305548e7697d69401487590432c"
+source = "git+https://github.com/getlipa/wild?tag=v1.4.1#cfa2bc1e2043cb889be6ee5ee582d388748f5c0d"
 dependencies = [
  "base64 0.21.2",
  "bdk",
@@ -766,7 +766,7 @@ dependencies = [
  "honey-badger",
  "log",
  "oslog",
- "perro 1.0.1 (git+https://github.com/getlipa/perro?tag=v1.1.0)",
+ "perro",
  "rand",
  "secp256k1",
  "simplelog",
@@ -971,14 +971,6 @@ name = "percent-encoding-rfc3986"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3637c05577168127568a64e9dc5a6887da720efef07b3d9472d45f63ab191166"
-
-[[package]]
-name = "perro"
-version = "1.0.1"
-source = "git+https://github.com/getlipa/perro?tag=v1.0.1#89076419cf129fa2679e3dca0683e1c140ccf7ce"
-dependencies = [
- "thiserror",
-]
 
 [[package]]
 name = "perro"
