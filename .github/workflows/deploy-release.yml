@@ -18,11 +18,11 @@ jobs:
         target: [ x86_64-apple-ios, aarch64-apple-ios, aarch64-apple-ios-sim ]
     steps:
       - name: Checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
       - name: Install rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.67.0
           profile: minimal
           override: true
           target: ${{ matrix.target }}
@@ -56,11 +56,11 @@ jobs:
         target: [ aarch64-linux-android, armv7-linux-androideabi, i686-linux-android ]
     steps:
       - name: Checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
       - name: Install rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.67.0
           profile: minimal
           override: true
           target: ${{ matrix.target }}
@@ -271,14 +271,10 @@ jobs:
           
           cp ../bindings/kotlin/uniffi/lipabusinesslib/lipabusinesslib.kt LipaBusinessLib/src/main/java/com/getlipa/lipabusinesslib/lipabusinesslib.kt
           
-          mkdir -p jniLibs/arm64
           mkdir -p jniLibs/arm64-v8a
-          mkdir -p jniLibs/armeabi
           mkdir -p jniLibs/armeabi-v7a
           mkdir -p jniLibs/x86
-          cp ../target/aarch64-linux-android/release/libuniffi_lipabusinesslib.so jniLibs/arm64
           cp ../target/aarch64-linux-android/release/libuniffi_lipabusinesslib.so jniLibs/arm64-v8a
-          cp ../target/armv7-linux-androideabi/release/libuniffi_lipabusinesslib.so jniLibs/armeabi
           cp ../target/armv7-linux-androideabi/release/libuniffi_lipabusinesslib.so jniLibs/armeabi-v7a
           cp ../target/i686-linux-android/release/libuniffi_lipabusinesslib.so jniLibs/x86
           zip -r jniLibs.zip jniLibs
